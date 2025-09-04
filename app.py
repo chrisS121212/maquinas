@@ -72,6 +72,34 @@ def exec_sql(sql: str, params: tuple = None) -> bool:
     finally:
         conn.close()
 
+def exec_sql_returning(sql: str, params: tuple = None):
+    """
+    Ejecuta SQL y retorna (ok, value) donde value es la primera columna del RETURNING si existe.
+    """
+    conn = conectar_db()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or ())
+                value = None
+                try:
+                    row = cur.fetchone()
+                    if row:
+                        value = row[0]
+                except Exception:
+                    value = None
+        return True, value
+    except Exception as e:
+        print("DB error:", e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False, None
+    finally:
+        conn.close()
+      
+
 
 # -----------------------------
 # Autenticación y helpers
@@ -105,6 +133,21 @@ def is_admin():
     # Nota: los roles en tu BD son 'Admin' y 'Administrador' (según mencionaste).
     # Aquí consideramos que el rol con permiso total es 'Admin'.
     return session.get("rol") == "Admin"
+
+MESES_NOMBRE = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+]
+
+def normaliza_mes_nombre(mes_str: str) -> str | None:
+    """Devuelve el nombre correcto de mes si coincide (ignora mayúsculas/minúsculas/espacios)."""
+    if not mes_str:
+        return None
+    m = mes_str.strip().lower()
+    for nombre in MESES_NOMBRE:
+        if nombre.lower() == m:
+            return nombre  # normalizado, con mayúscula inicial
+    return None
 
 
 # -----------------------------
@@ -502,27 +545,153 @@ def api_config_delete(resource, id):
 
 #  ---  Tipo de cambio ---
 
-@app.route("/api/tipo_cambio", methods=["POST"])
-def api_tipo_cambio_create():
+from datetime import date
+
+@app.route('/cambio')
+def cambio():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+
+    fecha_actual = date.today()
+    meses = [
+        "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+        "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
+    ]
+    anio = fecha_actual.year
+    mes_num = fecha_actual.month
+    mes = meses[mes_num - 1]  # 👈 string
+
+    tipo_cambio_actual = query_uno("""
+        SELECT id_cambio, anio, mes, valor_cambio
+        FROM tipo_cambio
+        WHERE anio = %s AND mes = %s
+        LIMIT 1
+    """, (anio, mes)) or {"anio": anio, "mes": mes, "valor_cambio": "-"}
+
+
+    lista_cambios = query_todos("""
+        SELECT id_cambio, anio, mes, valor_cambio
+        FROM tipo_cambio
+        ORDER BY anio::int DESC, id_cambio DESC
+    """)
+
+    return render_template(
+        'cambio.html',
+        usuario=session['usuario'],
+        rol=session.get('rol'),
+        fecha_actual=fecha_actual.strftime('%d-%m-%Y'),
+        tipo_cambio_actual=tipo_cambio_actual,
+        tipo_cambio=lista_cambios,
+        mes_num=mes_num,
+        mes=mes
+    )
+
+
+@app.route('/api/tipo_cambio/<int:id_cambio>', methods=['GET'])
+def api_tipo_cambio_detalle(id_cambio):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
+    row = query_uno("""
+        SELECT id_cambio, anio, mes, valor_cambio
+        FROM tipo_cambio
+        WHERE id_cambio = %s
+    """, (id_cambio,))
+    if not row:
+        return jsonify({'ok': False, 'msg': 'No encontrado'}), 404
+    return jsonify(row)
+
+@app.route('/api/tipo_cambio', methods=['POST'])
+def api_tipo_cambio_crear():
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
     if not is_admin():
-        return jsonify(ok=False, msg="No autorizado"), 403
+        return jsonify({'ok': False, 'msg': 'Solo Admin puede crear'}), 403
 
-    data = request.get_json() or {}
-    cols = []
-    vals = []
-    for f in ["nombre", "valor"]:
-        if f in data:
-            cols.append(f)
-            vals.append(data.get(f))
+    data = request.get_json(silent=True) or {}
+    try:
+        anio  = int(data.get('anio'))
+        valor = float(data.get('valor_cambio'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Campos requeridos: anio, valor_cambio'}), 400
 
-    if not cols:
-        return jsonify(ok=False, msg="No hay campos para insertar"), 400
+    mes_in = data.get('mes')
+    mes = normaliza_mes_nombre(mes_in)
+    if not mes:
+        return jsonify({'ok': False, 'msg': 'Mes inválido. Usa Enero..Diciembre'}), 400
 
-    placeholders = ",".join(["%s"] * len(cols))
-    cols_sql = ",".join(cols)
-    sql = f"INSERT INTO tipo_cambio ({cols_sql}) VALUES ({placeholders})"
-    ok = exec_sql(sql, tuple(vals))
-    return jsonify(ok=bool(ok), msg="Creado" if ok else "Error al crear")
+    # Evitar duplicado (anio, mes) - ahora mes es string
+    dup = query_uno("SELECT id_cambio FROM tipo_cambio WHERE anio=%s AND mes=%s LIMIT 1", (anio, mes))
+    if dup:
+        return jsonify({'ok': False, 'msg': 'Ya existe un tipo de cambio para ese año/mes'}), 409
+
+    ok, last_id = exec_sql_returning(
+        """
+        INSERT INTO tipo_cambio(anio, mes, valor_cambio)
+        VALUES (%s, %s, %s)
+        RETURNING id_cambio
+        """,
+        (anio, mes, valor),
+    )
+    return (jsonify({'ok': True, 'id': last_id})
+            if ok else (jsonify({'ok': False, 'msg': 'Error al crear'}), 500))
+
+
+
+@app.route('/api/tipo_cambio/<int:id_cambio>', methods=['PUT'])
+def api_tipo_cambio_actualizar(id_cambio):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
+    if not is_admin():
+        return jsonify({'ok': False, 'msg': 'Solo Admin puede actualizar'}), 403
+
+    data = request.get_json(silent=True) or {}
+    try:
+        anio  = int(data.get('anio'))
+        valor = float(data.get('valor_cambio'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Campos requeridos: anio, valor_cambio'}), 400
+
+    mes_in = data.get('mes')
+    mes = normaliza_mes_nombre(mes_in)
+    if not mes:
+        return jsonify({'ok': False, 'msg': 'Mes inválido. Usa Enero..Diciembre'}), 400
+
+    curr = query_uno("SELECT id_cambio FROM tipo_cambio WHERE id_cambio=%s", (id_cambio,))
+    if not curr:
+        return jsonify({'ok': False, 'msg': 'No encontrado'}), 404
+
+    dup = query_uno("""
+        SELECT id_cambio FROM tipo_cambio
+        WHERE anio=%s AND mes=%s AND id_cambio <> %s
+        LIMIT 1
+    """, (anio, mes, id_cambio))
+    if dup:
+        return jsonify({'ok': False, 'msg': 'Ya existe un tipo de cambio para ese año/mes'}), 409
+
+    ok, _ = exec_sql_returning("""
+        UPDATE tipo_cambio
+        SET anio=%s, mes=%s, valor_cambio=%s
+        WHERE id_cambio=%s
+        RETURNING id_cambio
+    """, (anio, mes, valor, id_cambio))
+    return jsonify({'ok': bool(ok)})
+
+
+
+@app.route('/api/tipo_cambio/<int:id_cambio>', methods=['DELETE'])
+def api_tipo_cambio_eliminar(id_cambio):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
+    if not is_admin():
+        return jsonify({'ok': False, 'msg': 'Solo Admin puede eliminar'}), 403
+    curr = query_uno("SELECT id_cambio FROM tipo_cambio WHERE id_cambio=%s", (id_cambio,))
+    if not curr:
+        return jsonify({'ok': False, 'msg': 'No encontrado'}), 404
+    ok, _ = exec_sql_returning("DELETE FROM tipo_cambio WHERE id_cambio=%s RETURNING id_cambio", (id_cambio,))
+    return jsonify({'ok': bool(ok)})
+
+
+
 
 
 

@@ -86,14 +86,7 @@
     <div class="metric">
       <div class="icon"><i class="fa-solid fa-dollar-sign"></i></div>
       <div>
-        <small>Tipo de cambio actual
-          {% if tipo_cambio_actual and tipo_cambio_actual.mes and tipo_cambio_actual.anio %}
-            ({{ '%02d'|format(tipo_cambio_actual.mes) }}-{{ tipo_cambio_actual.anio }})
-          {% endif %}
-        </small>
-        <strong>
-          {% if tipo_cambio_actual %}{{ tipo_cambio_actual.valor_cambio }}{% else %}—{% endif %}
-        </strong>
+        <div><small>Tipo de cambio ({{ '%02d'|format(mes_num) }}-{{ tipo_cambio_actual.anio }})</small><strong>¢ {{ tipo_cambio_actual.valor_cambio }}</strong></div>
       </div>
     </div>
   </section>
@@ -109,7 +102,7 @@
       </div>
     </div>
     <div class="panel-body">
-      <table id="tblCambio" class="table table-sm table-hover">
+      <table id="tblCambio" class="table table-sm table-hover text-center">
         <thead>
           <tr>
             <th>Año</th>
@@ -121,7 +114,7 @@
           {% for r in tipo_cambio %}
           <tr data-id="{{ r.id_cambio }}">
             <td class="dbl">{{ r.anio }}</td>
-            <td class="dbl">{{ '%02d'|format(r.mes|int) }}</td>
+            <td class="dbl">{{ r.mes }}</td>
             <td class="dbl">{{ r.valor_cambio }}</td>
           </tr>
           {% else %}
@@ -157,10 +150,18 @@
           <div class="col-12 col-md-4">
             <label class="form-label">Mes</label>
             <select id="mes" class="form-select bg-dark text-light border-secondary" required>
-              <option value="">Ninguno</option>
-              {% for m in range(1,13) %}
-              <option value="{{ m }}">{{ '%02d'|format(m) }}</option>
-              {% endfor %}
+              <option value="Enero">Enero</option>
+              <option value="Febrero">Febrero</option>
+              <option value="Marzo">Marzo</option>
+              <option value="Abril">Abril</option>
+              <option value="Mayo">Mayo</option>
+              <option value="Junio">Junio</option>
+              <option value="Julio">Julio</option>
+              <option value="Agosto">Agosto</option>
+              <option value="Septiembre">Septiembre</option>
+              <option value="Octubre">Octubre</option>
+              <option value="Noviembre">Noviembre</option>
+              <option value="Diciembre">Diciembre</option>
             </select>
           </div>
           <div class="col-12 col-md-4">
@@ -240,12 +241,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function getFormData(){
     return {
-      id_cambio: toIntOrNull(document.getElementById('id_cambio').value),
-      anio:      toIntOrNull(document.getElementById('anio').value),
-      mes:       toIntOrNull(document.getElementById('mes').value),
-      valor_cambio: document.getElementById('valor_cambio').value ? Number(document.getElementById('valor_cambio').value) : null
+      id_cambio: document.getElementById('id_cambio').value || null,
+      anio: parseInt(document.getElementById('anio').value),
+      mes: document.getElementById('mes').value,  // 👈 aquí debe ir "Enero", "Febrero"...
+      valor_cambio: parseFloat(document.getElementById('valor_cambio').value)
     };
   }
+
   function validateForm(){
     let ok = true;
     ['anio','mes','valor_cambio'].forEach(id=>{

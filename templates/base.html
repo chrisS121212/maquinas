@@ -63,7 +63,7 @@
         <a class="nav-link" href="">
             <i class="fa-solid fa-wallet"></i> <span>Gastos</span>
         </a>
-        <a class="nav-link" href="{{ url_for('tipo_cambio') }}">
+        <a class="nav-link" href="{{ url_for('cambio') }}">
             <i class="fa-solid fa-dollar-sign"></i> <span>Tipo de cambio</span>
         </a>
         {% if session.get('rol') == 'Admin' %}
@@ -105,7 +105,7 @@
             <a class="nav-link" href="{{ url_for('inicio') }}"><i class="fa-solid fa-house"></i> Inicio</a>
             <a class="nav-link" href="{{ url_for('maquinas') }}"><i class="fa-solid fa-industry"></i> Máquinas</a>
             <a class="nav-link" href=""><i class="fa-solid fa-wallet"></i> Gastos</a>
-            <a class="nav-link" href="{{ url_for('tipo_cambio') }}"><i class="fa-solid fa-dollar-sign"></i> Tipo de cambio</a>
+            <a class="nav-link" href="{{ url_for('cambio') }}"><i class="fa-solid fa-dollar-sign"></i> Tipo de cambio</a>
             <a class="nav-link" href="{{ url_for('configuracion') }}"><i class="fa-solid fa-cog"></i> Configuración</a>
         </nav>
         <div class="sidebar-footer">
