@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block titulo %}Tipo de cambio{% endblock %}
+
+{% block contenido %}
+<style>
+  :root{
+    --bg:#0f0f0f; --panel:#141414; --muted:#bdbdbd; --gap:12px;
+  }
+  /* Ocupa toda la altura del main y respeta el layout global */
+  .page-in{
+    height:100%;
+    min-height:0;
+    display:grid;
+    grid-template-rows: auto 1fr; /* métricas arriba, tabla llena el resto */
+    gap:var(--gap);
+    padding:var(--gap);
+    box-sizing:border-box;
+  }
+
+  /* Métricas (2 tarjetas) */
+  .metrics{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:var(--gap);
+  }
+  @media (min-width: 576px){ .metrics{ grid-template-columns: repeat(2,1fr); } }
+
+  .metric{
+    background: var(--panel);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:16px;
+    padding:1rem;
+    display:flex; align-items:center; gap:.9rem;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+    color:#e9ecef;
+  }
+  .metric .icon{
+    width:42px; height:42px; border-radius:12px; background:#1b1b1b;
+    display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .metric small{ color:var(--muted); display:block; line-height:1.1; }
+  .metric strong{ font-size:1.05rem; }
+
+  /* Panel tabla */
+  .panel{
+    background: var(--panel);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:16px;
+    display:flex; flex-direction:column;
+    min-height:0; color:#f8f9fa; box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
+  .panel-header{
+    padding:.85rem 1rem; border-bottom:1px solid rgba(255,255,255,.06);
+    display:flex; align-items:center; gap:.6rem; font-weight:600; flex-shrink:0;
+  }
+  .panel-body{ flex:1; min-height:0; overflow:auto; } /* ← scroll interno */
+  .panel-footer{
+    border-top:1px solid rgba(255,255,255,.06);
+    color:#bdbdbd; padding:.5rem .9rem; font-size:.875rem;
+    display:flex; justify-content:space-between; align-items:center; flex-shrink:0;
+  }
+
+  /* Tabla */
+  table.table{ color:#e9ecef; margin-bottom:0; }
+  table.table thead th{
+    position:sticky; top:0; z-index:1; background:#1b1b1b;
+    border-bottom:1px solid rgba(255,255,255,.12); color:#b9b9b9;
+  }
+  table.table td, table.table th{ white-space:nowrap; vertical-align:middle; }
+  table.table tbody tr:hover{ background:rgba(255,255,255,.03); cursor:pointer; }
+
+  /* Toast container (oscuro como en máquinas) */
+  #toastContainer{ z-index:11000; }
+</style>
+
+<div class="page-in">
+  <!-- Métricas superiores -->
+  <section class="metrics">
+    <div class="metric">
+      <div class="icon"><i class="fa-regular fa-calendar"></i></div>
+      <div>
+        <small>Fecha</small>
+        <strong>{{ fecha_actual }}</strong>
+      </div>
+    </div>
+    <div class="metric">
+      <div class="icon"><i class="fa-solid fa-dollar-sign"></i></div>
+      <div>
+        <small>Tipo de cambio actual
+          {% if tipo_cambio_actual and tipo_cambio_actual.mes and tipo_cambio_actual.anio %}
+            ({{ '%02d'|format(tipo_cambio_actual.mes) }}-{{ tipo_cambio_actual.anio }})
+          {% endif %}
+        </small>
+        <strong>
+          {% if tipo_cambio_actual %}{{ tipo_cambio_actual.valor_cambio }}{% else %}—{% endif %}
+        </strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- Panel con tabla de tipo de cambio -->
+  <section class="panel">
+    <div class="panel-header">
+      <i class="fa-solid fa-table"></i> <span>Histórico de tipo de cambio</span>
+      <div class="ms-auto d-flex gap-2">
+        <button id="btnAdd" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus me-1"></i> Agregar
+        </button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <table id="tblCambio" class="table table-sm table-hover">
+        <thead>
+          <tr>
+            <th>Año</th>
+            <th>Mes</th>
+            <th>Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in tipo_cambio %}
+          <tr data-id="{{ r.id_cambio }}">
+            <td class="dbl">{{ r.anio }}</td>
+            <td class="dbl">{{ '%02d'|format(r.mes|int) }}</td>
+            <td class="dbl">{{ r.valor_cambio }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="text-muted small">Sin registros</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-footer">
+      <span class="text-white-50">Doble click en una fila para editar</span>
+      <strong>{{ tipo_cambio|length }}</strong>
+    </div>
+  </section>
+</div>
+
+<!-- Modal Agregar/Editar -->
+<div class="modal fade" id="modalCambio" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary rounded-4">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">
+          <i class="fa-solid fa-gear me-2"></i><span id="modalTitulo">Tipo de cambio</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="frmCambio" class="row g-3">
+          <input type="hidden" id="id_cambio">
+          <div class="col-12 col-md-4">
+            <label class="form-label">Año</label>
+            <input id="anio" type="number" class="form-control bg-dark text-light border-secondary" min="2000" max="2100" required>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label">Mes</label>
+            <select id="mes" class="form-select bg-dark text-light border-secondary" required>
+              <option value="">Ninguno</option>
+              {% for m in range(1,13) %}
+              <option value="{{ m }}">{{ '%02d'|format(m) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label">Valor</label>
+            <input id="valor_cambio" type="number" step="0.0001" min="0" class="form-control bg-dark text-light border-secondary" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-secondary">
+        {% if rol == 'Admin' %}
+          <button id="btnDelete" type="button" class="btn btn-outline-danger me-auto">
+            <i class="fa-solid fa-trash"></i> Eliminar
+          </button>
+          <button id="btnSave" type="button" class="btn btn-primary">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+          </button>
+        {% else %}
+          <span class="text-white-50 small me-auto">
+            <i class="fa-solid fa-lock me-1"></i> Solo lectura (no eres Admin)
+          </span>
+        {% endif %}
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const isAdmin = {{ (rol == 'Admin') | tojson }};
+  const modalEl = document.getElementById('modalCambio');
+  const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+  // ===== Toasts (mismo look que máquinas/configuración)
+  function showToast({ title='Información', body='', variant='success', delay=1800 } = {}){
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success:'text-success fa-circle-check',
+      error:'text-danger fa-circle-xmark',
+      warning:'text-warning fa-triangle-exclamation',
+      info:'text-info fa-circle-info'
+    };
+    const icon = icons[variant] || icons.info;
+    const id = 't'+Date.now();
+    container.insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center bg-dark border-secondary rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header border-secondary">
+          <i class="fa-solid ${icon} me-2"></i>
+          <strong class="me-auto">${title}</strong>
+          <small class="text-white-50">ahora</small>
+          <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+        <div class="toast-body">${body}</div>
+      </div>
+    `);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, { delay, autohide:true }).show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+  }
+
+  // ===== Helpers
+  const toIntOrNull = v => (v === '' || v === null || v === undefined) ? null : parseInt(v, 10);
+  function setFieldValue(id, v){
+    const el = document.getElementById(id); if (!el) return;
+    const val = (v === null || v === undefined) ? '' : String(v);
+    el.value = val;
+  }
+  function clearForm(){ document.querySelectorAll('#frmCambio input, #frmCambio select').forEach(el => el.value = ''); }
+  function fillForm(d){
+    setFieldValue('id_cambio', d.id_cambio);
+    setFieldValue('anio', d.anio);
+    setFieldValue('mes', d.mes);
+    setFieldValue('valor_cambio', d.valor_cambio);
+  }
+  function getFormData(){
+    return {
+      id_cambio: toIntOrNull(document.getElementById('id_cambio').value),
+      anio:      toIntOrNull(document.getElementById('anio').value),
+      mes:       toIntOrNull(document.getElementById('mes').value),
+      valor_cambio: document.getElementById('valor_cambio').value ? Number(document.getElementById('valor_cambio').value) : null
+    };
+  }
+  function validateForm(){
+    let ok = true;
+    ['anio','mes','valor_cambio'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (!el.value){ el.classList.add('is-invalid'); ok = false; }
+      else { el.classList.remove('is-invalid'); el.classList.add('is-valid'); }
+    });
+    return ok;
+  }
+  function resetValidation(){
+    document.querySelectorAll('#frmCambio .is-invalid, #frmCambio .is-valid')
+      .forEach(el => el.classList.remove('is-invalid','is-valid'));
+  }
+  modalEl?.addEventListener('show.bs.modal', resetValidation);
+  document.querySelectorAll('#frmCambio input, #frmCambio select').forEach(el=>{
+    el.addEventListener('input', ()=> el.classList.remove('is-invalid'));
+  });
+
+  // ===== Doble click para editar
+  const tbody = document.querySelector('#tblCambio tbody');
+  if (tbody && modal){
+    tbody.addEventListener('dblclick', async ev=>{
+      const tr = ev.target.closest('tr'); if (!tr) return;
+      const id = tr.dataset.id;
+      document.getElementById('modalTitulo').textContent = 'Editar tipo de cambio #' + id;
+      clearForm();
+
+      try{
+        const r = await fetch(`/api/tipo_cambio/${id}`);
+        const d = await r.json();
+        fillForm(d);
+        if (!isAdmin){
+          document.getElementById('btnSave').classList.add('d-none');
+          document.getElementById('btnDelete').classList.add('d-none');
+        }else{
+          document.getElementById('btnSave').classList.remove('d-none');
+          document.getElementById('btnDelete').classList.remove('d-none');
+        }
+        modal.show();
+      }catch(e){
+        showToast({ title:'Error', body:'No se pudo cargar el registro.', variant:'error' });
+      }
+    });
+  }
+
+  // ===== Agregar
+  document.getElementById('btnAdd')?.addEventListener('click', ()=>{
+    if (!modal) return;
+    document.getElementById('modalTitulo').textContent = 'Agregar tipo de cambio';
+    clearForm();
+    if (isAdmin){
+      document.getElementById('btnSave').classList.remove('d-none');
+      document.getElementById('btnDelete').classList.add('d-none');
+    }
+    modal.show();
+  });
+
+  // ===== Guardar (crear/actualizar)
+  document.getElementById('btnSave')?.addEventListener('click', async ()=>{
+    if (!validateForm()){
+      showToast({ title:'Formulario incompleto', body:'Revisa los campos obligatorios.', variant:'warning' });
+      return;
+    }
+    const payload = getFormData();
+    const isNew = !payload.id_cambio;
+    const url = isNew ? '/api/tipo_cambio' : `/api/tipo_cambio/${payload.id_cambio}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    try{
+      const r = await fetch(url, {
+        method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+      const res = await r.json();
+      if (res.ok){
+        showToast({ title: isNew?'Creado':'Actualizado', body:'Operación exitosa.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'Error', body: res.msg || 'No se pudo guardar.', variant:'error' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+
+  // ===== Eliminar
+  document.getElementById('btnDelete')?.addEventListener('click', async ()=>{
+    const id = document.getElementById('id_cambio').value;
+    if (!id) return;
+    if (!confirm('¿Seguro que deseas eliminar el registro #'+id+'?')) return;
+
+    try{
+      const r = await fetch(`/api/tipo_cambio/${id}`, { method:'DELETE' });
+      const res = await r.json();
+      if (res.ok){
+        showToast({ title:'Eliminado', body:'Registro eliminado correctamente.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'No eliminado', body: res.msg || 'No se pudo eliminar.', variant:'warning' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+});
+</script>
+{% endblock %}

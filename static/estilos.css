@@ -1,0 +1,335 @@
+:root {
+  --sidebar-w: 260px;
+  --sidebar-bg: #0f0f0f;  /* negro mate */
+  --sidebar-text: #e9ecef;
+  --sidebar-muted: #b9b9b9;
+  --sidebar-hover: #1a1a1a;
+  --sidebar-active: #0d6efd;
+  --gap: 12px;
+  --row-metrics: 3fr;  /* altura relativa métricas en desktop */
+  --row-tables: 17fr;     /* altura relativa tablas en desktop */
+}
+
+/* ====== BODY ====== */
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #000;
+  color: #f8f9fa;
+}
+
+/* Desktop (≥992px): sin scroll global */
+@media (min-width: 992px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Tablets/móviles (<992px): scroll global */
+@media (max-width: 991.98px) {
+  html, body {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch; /* scroll suave en iOS */
+  }
+
+  /* Ocultar la barra visual de scroll (opcional) */
+  html, body {
+    scrollbar-width: none;       /* Firefox */
+  }
+  html::-webkit-scrollbar {
+    display: none;               /* Chrome/Safari */
+  }
+}
+
+/* ====== SIDEBAR ====== */
+.app-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255,255,255,.06);
+  z-index: 1030;
+}
+.brand-box {
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.user-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #1f1f1f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.menu {
+  padding: .75rem;
+  overflow-y: auto;
+  flex: 1;
+}
+.menu .nav-link {
+  color: var(--sidebar-text);
+  border-radius: .75rem;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .625rem .75rem;
+  transition: .15s background, color;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.menu .nav-link .fa-solid {
+  width: 20px;
+  text-align: center;
+}
+.menu .nav-link:hover {
+  background: var(--sidebar-hover);
+  color: #fff;
+}
+.menu .nav-link.active {
+  background: rgba(13,110,253,.12);
+  color: #fff;
+  border: 1px solid rgba(13,110,253,.35);
+}
+.sidebar-footer {
+  padding: .75rem;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+.btn-logout {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  border-radius: .75rem;
+  background: #1b1b1b;
+  color: #f8f9fa;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.btn-logout:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.toast.bg-dark .toast-header{ background:#1a1a1a; color:#e9ecef; border-bottom:1px solid rgba(255,255,255,.08); }
+.toast.bg-dark .toast-body{ color:#e9ecef; }
+
+/* ====== CONTENIDO ====== */
+@media (min-width: 992px) {
+  .app-content {
+    margin-left: var(--sidebar-w);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+}
+.app-content > .container-fluid {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.app-content .card.bg-dark {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+.app-content .card-body {
+  padding: 0 !important;
+}
+
+.app-content > .container-fluid,
+.app-content .card,
+.app-content .card-body{
+  height: 100%;
+  padding: 0 !important;
+}
+
+/* ====== PAGE INTERNA (métricas + tablas) ====== */
+.page-in {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: var(--row-metrics) var(--row-tables); /* móvil: métricas y luego tablas */
+  gap: var(--gap);
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 16px;
+}
+@media (min-width: 992px) {
+  .page-in {
+    height: 100vh;
+    grid-template-rows: var(--row-metrics) var(--row-tables);
+  }
+  .page-in2 {
+    height: 100vh;
+    grid-template-rows: var(--row-tables);
+  }
+}
+
+/* ====== MÉTRICAS ====== */
+.metrics {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(2, 1fr); /* móvil: 2 col × 2 filas */
+  grid-auto-rows: 0.1fr;
+}
+@media (min-width: 992px) {
+  .metrics {
+    grid-template-columns: repeat(4, 1fr); /* desktop: 1 filas de 4 */
+    grid-auto-rows: 1fr;
+  }
+}
+.metric {
+  background: #141414;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 14px;
+  padding: .9rem;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  min-height: 210px;
+  color: #e9ecef;
+}
+
+.metric-double {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.metric .icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #1b1b1b;
+  flex-shrink: 0;
+}
+.metric small {
+  color: var(--sidebar-muted);
+  display: block;
+  line-height: 1.1;
+}
+.metric strong {
+  font-size: 1.05rem;
+}
+
+/* ====== TABLAS ====== */
+.tables-area {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto; /* móvil: apiladas */
+  min-height: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  gap: var(--gap);
+}
+
+@media (min-width: 992px) {
+  .tables-area {
+    height: 100%;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-template-rows: 1.5fr 1.5fr; /* Tamaño de la tablas de la derecha */
+    min-height: 0;
+    gap: var(--gap);
+  }
+  .panel--maquinas {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .panel--proveedores {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .panel--tipocambio {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+.panel {
+  background: #141414;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  color: #f8f9fa;
+}
+.panel-header {
+  padding: .85rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto; /* scroll interno si la tabla es larga */
+}
+.panel-footer {
+  border-top: 1px solid rgba(255,255,255,.06);
+  color: #bdbdbd;
+  padding: .5rem .9rem;
+  font-size: .875rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* ====== TABLAS ====== */
+.table {
+  color: #e9ecef;
+  margin-bottom: 0;
+}
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #1b1b1b;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+  color: #b9b9b9;
+}
+.table > :not(caption) > * > * {
+  background-color: transparent;
+}
+
+.table tbody td{
+    color: #8d8e8f;
+}
+.table tbody tr:hover {
+  background: rgba(255,255,255,.03);
+}
+.table td, .table th {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.text-truncate-200 {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-truncate-260 {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ====== MAQUINAS ====== */

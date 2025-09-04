@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% block titulo %}Configuración{% endblock %}
+
+{% block contenido %}
+<style>
+  :root{
+    --bg:#0f0f0f; --panel:#141414; --muted:#bdbdbd; --gap:12px;
+  }
+  /* Ocupa toda la altura disponible dentro del main */
+  .page-in{
+    height:100%;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    gap:var(--gap);
+    padding:var(--gap);
+    box-sizing:border-box;
+  }
+
+  /* GRID principal: 1 col en móvil; 30/70 en ≥992px */
+  .cfg-grid{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:var(--gap);
+    height:100%;
+    min-height:0; /* importante para permitir overflow interno */
+  }
+  @media (min-width: 992px){
+    .cfg-grid{ grid-template-columns: 30% 70%; }
+  }
+
+  /* Columnas: izquierda 4 filas; derecha 3 filas (todas mismas alturas relativas) */
+  .cfg-col{
+    display:grid;
+    gap:var(--gap);
+    min-height:0;
+  }
+  .cfg-col-left{
+    grid-template-rows: repeat(4, 1fr);
+  }
+  .cfg-col-right{
+    grid-template-rows: repeat(3, 1fr);
+  }
+
+  /* Panel estilo máquinas */
+  .panel{
+    background:var(--panel);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:16px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+    color:#f8f9fa;
+  }
+  .panel-header{
+    padding:.85rem 1rem;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    display:flex; align-items:center; gap:.6rem;
+    font-weight:600; flex-shrink:0;
+  }
+  .panel-header .title{ display:flex; align-items:center; gap:.6rem; }
+  .panel-body{
+    flex:1; min-height:0; overflow:auto; /* ← scroll propio */
+  }
+  .panel-footer{
+    border-top:1px solid rgba(255,255,255,.06);
+    color:#bdbdbd; padding:.5rem .9rem; font-size:.875rem;
+    display:flex; justify-content:space-between; align-items:center;
+    flex-shrink:0;
+  }
+
+  /* Tablas */
+  .table{ color:#e9ecef; margin-bottom:0; table-layout:fixed; width:100%; }
+  .table thead th{
+    position:sticky; top:0; z-index:1;
+    background:#1b1b1b; border-bottom:1px solid rgba(255,255,255,.12); color:#b9b9b9;
+  }
+  .table td,.table th{ vertical-align:middle; white-space:nowrap; }
+  .table tbody tr:hover { background: rgba(255,255,255,.03); }
+  .text-truncate-200{max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .text-truncate-260{max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  /* Iconos con ancho fijo para alinear títulos */
+  .fa-fw{ width:1.25rem; text-align:center; }
+
+  /* Toast (oscuro como en máquinas) */
+  #toastContainer{ z-index:11000; }
+</style>
+
+<div class="page-in">
+  {% if session.get('rol') != 'Admin' %}
+    <div class="alert alert-danger">Acceso denegado: solo Admin</div>
+  {% else %}
+
+  <section class="cfg-grid">
+    <!-- Columna izquierda: 4 tablas pequeñas -->
+    <div class="cfg-col cfg-col-left">
+
+      <!-- Usuarios -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-users fa-fw"></i> Usuarios</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="usuarios">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="usuarios">
+            <thead><tr><th>Usuario</th><th>Rol</th></tr></thead>
+            <tbody>
+              {% for u in usuarios %}
+              <tr data-id="{{ u.id_usuario }}">
+                <td data-field="name_usuario" class="text-truncate-200" title="{{ u.name_usuario }}">{{ u.name_usuario }}</td>
+                <td data-field="rol">{{ u.rol }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="2" class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ usuarios|length }}</strong></div>
+      </div>
+
+      <!-- Tipo Stacker -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-layer-group fa-fw"></i> Tipo Stacker</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="tipo_stacker">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="tipo_stacker">
+            <thead><tr><th>Stacker</th></tr></thead>
+            <tbody>
+              {% for s in tipo_stacker %}
+              <tr data-id="{{ s.id_stacker }}">
+                <td data-field="name_stacker" class="text-truncate-200" title="{{ s.name_stacker }}">{{ s.name_stacker }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ tipo_stacker|length }}</strong></div>
+      </div>
+
+      <!-- Tipo Jackpot -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-gem fa-fw"></i> Tipo Jackpot</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="tipo_jackpots">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="tipo_jackpots">
+            <thead><tr><th>Jackpot</th></tr></thead>
+            <tbody>
+              {% for t in tipo_jackpots %}
+              <tr data-id="{{ t.id_tipo }}">
+                <td data-field="name_jackpot" class="text-truncate-200" title="{{ t.name_jackpot }}">{{ t.name_jackpot }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ tipo_jackpots|length }}</strong></div>
+      </div>
+
+      <!-- Kit Wigos (4ta tabla izquierda) -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-plug fa-fw"></i> Kit Wigos</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="kit_wigos">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="kit_wigos">
+            <thead><tr><th>Kit</th></tr></thead>
+            <tbody>
+              {% for k in kit_wigos %}
+              <tr data-id="{{ k.id_kit }}">
+                <td data-field="name_kit" class="text-truncate-200" title="{{ k.name_kit }}">{{ k.name_kit }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ kit_wigos|length }}</strong></div>
+      </div>
+    </div>
+
+    <!-- Columna derecha: 3 tablas más anchas -->
+    <div class="cfg-col cfg-col-right">
+
+      <!-- Proveedores -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-truck-field fa-fw"></i> Proveedores</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="proveedores">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="proveedores">
+            <thead><tr><th>Proveedor</th></tr></thead>
+            <tbody>
+              {% for p in proveedores %}
+              <tr data-id="{{ p.id_proveedor }}">
+                <td data-field="name_proveedor" class="text-truncate-260" title="{{ p.name_proveedor }}">{{ p.name_proveedor }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ proveedores|length }}</strong></div>
+      </div>
+
+      <!-- Modelos -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-microchip fa-fw"></i> Modelos</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="modelos">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="modelos">
+            <thead><tr><th>Modelo</th><th>Proveedor</th></tr></thead>
+            <tbody>
+              {% for m in modelos %}
+              <tr data-id="{{ m.id_modelo }}" data-id_proveedor="{{ m.id_proveedor }}">
+                <td data-field="name_modelo" class="text-truncate-260" title="{{ m.name_modelo }}">{{ m.name_modelo }}</td>
+                <td data-field="id_proveedor">{{ m.name_proveedor }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="2" class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ modelos|length }}</strong></div>
+      </div>
+
+      <!-- Progresivos -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="title"><i class="fa-solid fa-chart-line fa-fw"></i> Progresivos</div>
+          <button class="btn btn-sm btn-primary ms-auto btn-add" data-resource="progresivos">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+        <div class="panel-body">
+          <table class="table table-sm table-hover table-dark text-center config-table" data-resource="progresivos">
+            <thead><tr><th>Progresivo</th></tr></thead>
+            <tbody>
+              {% for pr in progresivos %}
+              <tr data-id="{{ pr.id_progresivo }}">
+                <td data-field="name_progresivo" class="text-truncate-200" title="{{ pr.name_progresivo }}">{{ pr.name_progresivo }}</td>
+              </tr>
+              {% else %}
+              <tr><td class="text-muted small">Sin registros</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel-footer"><span>Total:</span><strong>{{ progresivos|length }}</strong></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Modal genérico oscuro (mismo estilo que máquinas) -->
+  <div class="modal fade" id="configModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <form id="configForm" class="modal-content bg-dark text-light border-secondary rounded-4">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">
+            <i class="fa-solid fa-gear me-2"></i><span id="configModalTitle">Editar</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="resource" id="modal_resource">
+          <input type="hidden" name="id" id="modal_id">
+          <div id="modal_fields"></div>
+          <div class="alert alert-danger d-none" id="configModalError"></div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-outline-danger me-auto" id="btnDelete">
+            <i class="fa-solid fa-trash"></i> Eliminar
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary" id="btnSave">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+  {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const modalEl = document.getElementById('configModal');
+  const modal = new bootstrap.Modal(modalEl, { backdrop: 'static' });
+  const modalTitle = document.getElementById('configModalTitle');
+  const modalFields = document.getElementById('modal_fields');
+  const modalResource = document.getElementById('modal_resource');
+  const modalId = document.getElementById('modal_id');
+  const configForm = document.getElementById('configForm');
+  const btnDelete = document.getElementById('btnDelete');
+  const errorBox = document.getElementById('configModalError');
+  const toastContainer = document.getElementById('toastContainer');
+
+  /* Datos para selects dependientes */
+  const OPTIONS = {
+    proveedores: {{ proveedores|tojson|safe }},
+    roles: [{id:'Admin', name:'Admin'}, {id:'Administrador', name:'Administrador'}]
+  };
+
+  /* Campos por recurso */
+  const resourceFields = {
+    'kit_wigos': [{name:'name_kit', label:'Nombre del kit', type:'text'}],
+    'modelos': [{name:'name_modelo', label:'Nombre del modelo', type:'text'}, {name:'id_proveedor', label:'Proveedor', type:'select', options:'proveedores'}],
+    'progresivos': [{name:'name_progresivo', label:'Nombre progresivo', type:'text'}],
+    'proveedores': [{name:'name_proveedor', label:'Nombre proveedor', type:'text'}],
+    'tipo_jackpots': [{name:'name_jackpot', label:'Nombre jackpot', type:'text'}],
+    'tipo_stacker': [{name:'name_stacker', label:'Nombre stacker', type:'text'}],
+    'usuarios': [{name:'name_usuario', label:'Usuario', type:'text'}, {name:'rol', label:'Rol', type:'select', options:'roles'}, {name:'pass_usuario', label:'Contraseña (dejar vacío para no cambiar)', type:'password'}]
+  };
+
+  /* Toasts oscuros (igual a máquinas) */
+  function showToast({ title='Información', body='', variant='success', delay=1800 } = {}){
+    const icons = {
+      success:'text-success fa-circle-check',
+      error:'text-danger fa-circle-xmark',
+      warning:'text-warning fa-triangle-exclamation',
+      info:'text-info fa-circle-info'
+    };
+    const icon = icons[variant] || icons.info;
+    const id = 't'+Date.now();
+    toastContainer.insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center bg-dark border-secondary rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header border-secondary">
+          <i class="fa-solid ${icon} me-2"></i>
+          <strong class="me-auto">${title}</strong>
+          <small class="text-white-50">ahora</small>
+          <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+        <div class="toast-body">${body}</div>
+      </div>`);
+    const el = document.getElementById(id);
+    const t = new bootstrap.Toast(el, { delay, autohide:true });
+    t.show();
+    el.addEventListener('hidden.bs.toast', ()=> el.remove());
+  }
+
+  /* Construye inputs del modal según recurso */
+  function buildFields(resource, data) {
+    modalFields.innerHTML = '';
+    const fields = resourceFields[resource] || [];
+    fields.forEach(f => {
+      const value = (data && (data[f.name] !== undefined)) ? data[f.name] : '';
+      const wrap = document.createElement('div');
+      wrap.className = 'mb-3';
+
+      if (f.type === 'select') {
+        const select = document.createElement('select');
+        select.className = 'form-select bg-dark text-light border-secondary';
+        select.name = f.name;
+
+        const empty = document.createElement('option');
+        empty.value = ''; empty.textContent = '-- Seleccionar --';
+        select.appendChild(empty);
+
+        const opts = OPTIONS[f.options] || [];
+        opts.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o.id ?? o.id_proveedor ?? o.id;
+          opt.textContent = o.name ?? o.name_proveedor ?? o.name;
+          if (String(value) === String(opt.value)) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        wrap.innerHTML = `<label class="form-label">${f.label}</label>`;
+        wrap.appendChild(select);
+      } else {
+        wrap.innerHTML = `
+          <label class="form-label">${f.label}</label>
+          <input class="form-control bg-dark text-light border-secondary" name="${f.name}" type="${f.type}" value="${value}">
+        `;
+      }
+      modalFields.appendChild(wrap);
+    });
+  }
+
+  function rowToObject(tr, resource) {
+    const obj = {};
+    (resourceFields[resource]||[]).forEach(f=>{
+      const td = tr.querySelector(`td[data-field="${f.name}"]`);
+      obj[f.name] = td ? td.textContent.trim() : '';
+    });
+    return obj;
+  }
+
+  function openEdit(resource, id, data, dataset) {
+    modalTitle.textContent = `Editar ${resource}`;
+    modalResource.value = resource; modalId.value = id || '';
+    if (dataset && dataset.id_proveedor) data.id_proveedor = dataset.id_proveedor;
+    buildFields(resource, data);
+    btnDelete.classList.remove('d-none');
+    errorBox.classList.add('d-none');
+    modal.show();
+  }
+
+  function openCreate(resource) {
+    modalTitle.textContent = `Crear ${resource}`;
+    modalResource.value = resource; modalId.value = '';
+    buildFields(resource, {});
+    btnDelete.classList.add('d-none');
+    errorBox.classList.add('d-none');
+    modal.show();
+  }
+
+  // Doble click = editar
+  document.querySelectorAll('.config-table').forEach(table=>{
+    table.addEventListener('dblclick', e=>{
+      const td = e.target.closest('td'); if (!td) return;
+      const tr = td.closest('tr'); const resource = table.dataset.resource;
+      const id = tr.dataset.id; const data = rowToObject(tr, resource);
+      openEdit(resource, id, data, tr.dataset);
+    });
+  });
+
+  // Agregar
+  document.querySelectorAll('.btn-add').forEach(btn=>{
+    btn.addEventListener('click', ()=> openCreate(btn.dataset.resource));
+  });
+
+  // Guardar (crear/actualizar)
+  configForm.addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const resource = modalResource.value; const id = modalId.value;
+    const payload = {};
+    new FormData(configForm).forEach((v,k)=>{
+      if (k==='resource'||k==='id') return;
+      if (k==='pass_usuario' && v==='') return; // no cambiar pass si vacío
+      payload[k] = v || null;
+    });
+
+    try{
+      const res = await fetch(id ? `/api/${resource}/${id}` : `/api/${resource}`, {
+        method: id ? 'PUT':'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json();
+      if (j.ok){
+        showToast({ title: id?'Actualizado':'Creado', body:'Operación exitosa.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'Error', body: j.msg || 'No se pudo guardar.', variant:'error' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'warning' });
+    }
+  });
+
+  // Eliminar
+  btnDelete.addEventListener('click', async ()=>{
+    const resource = modalResource.value; const id = modalId.value;
+    if (!id) return;
+    if (!confirm('¿Seguro que deseas eliminar este registro?')) return;
+    try{
+      const res = await fetch(`/api/${resource}/${id}`, { method:'DELETE' });
+      const j = await res.json();
+      if (j.ok){
+        showToast({ title:'Eliminado', body:'Registro eliminado correctamente.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'No eliminado', body: j.msg || 'No se pudo eliminar.', variant:'warning' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+});
+</script>
+{% endblock %}

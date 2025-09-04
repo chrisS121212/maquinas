@@ -1,0 +1,145 @@
+<!--- templates/inicio.html --->
+{% extends "base.html" %}
+
+{% block titulo %}Inicio {% endblock %}
+
+{% block contenido %}
+    <style>
+        @media (min-width: 992px){
+            :root{
+                --bg: #0f0f0f;
+                --panel: #141414;
+                --muted: #bdbdbd;
+                --gap: 12px;
+                --row-metrics: .6fr;  /* altura relativa métricas (>= lg) */
+                --row-tables: 2.4fr;     /* altura relativa tablas   (>= lg) */
+            }
+        }
+        :root{
+            --bg: #0f0f0f;
+            --panel: #141414;
+            --muted: #bdbdbd;
+            --gap: 8px;
+            --row-metrics: 0.5fr;  /* altura relativa métricas (>= lg) */
+            --row-tables: 3fr;     /* altura relativa tablas   (>= lg) */
+        }
+        /* ===== Base: MÓVIL/TABLET (scroll global permitido) ===== */
+        html, body { height: 100%; margin: 0; background: var(--bg); color: #f8f9fa; overflow: auto; }
+        .page {
+            min-height: 100vh;
+            display: grid;
+            gap: var(--gap);
+            padding: var(--gap);
+            box-sizing: border-box;
+            grid-template-rows: auto auto; /* métricas arriba, tablas debajo */
+        }
+    </style>
+    <div class="page-in">
+        <!-- MÉTRICAS (8 tarjetas) -->
+         <section class="metrics">
+            <div class="metric metric-double">
+                <h3>Información</h3>
+                <div><small>Fecha</small><strong>{{ fecha_actual }}</strong></div>
+                <div><small>Tipo de cambio ({{ '%02d'|format(mes_num) }}-{{ tipo_cambio_actual.anio }})</small><strong>¢ {{ tipo_cambio_actual.valor_cambio }}</strong></div>
+                <div><small>Máquinas activas</small><strong>{{ maquinas_activas }}</strong></div>
+            </div>
+            <div class="metric metric-double">
+                <h3>Tipo de stacker</h3>
+                <div><small>Stacker UBA</small><strong>{{ maquinas_stacker_uba }}</strong></div>
+                <div><small>Stacker Ivizion</small><strong>{{ maquinas_stacker_ivizion }}</strong></div>
+                <div><small>Stacker MEI</small><strong>{{ maquinas_stacker_mei }}</strong></div>
+            </div>
+            <div class="metric metric-double">
+                <h3>Tipo de Jackpot</h3>
+                <div><small>Progresivo “Progresivo”</small><strong>{{ maquinas_prog_progresivo }}</strong></div>
+                <div><small>Progresivo “Maxi Jackpot”</small><strong>{{ maquinas_prog_maxi }}</strong></div>
+            </div>
+            <div class="metric metric-double">
+                <h3>Kit de Wigos</h3>
+                <div><small>Kit Wigos 5.5</small><strong>{{ wigos_55 }}</strong></div>
+                <div><small>Kit Wigos 6.4</small><strong>{{ wigos_64 }}</strong></div>
+            </div>
+        </section>
+        <!-- TABLAS -->
+        <section class="tables-area">
+            <!-- Máquinas -->
+            <div class="panel panel--maquinas">
+                <div class="panel-header"><i class="fa-solid fa-industry"></i> Máquinas</div>
+                <div class="panel-body">
+                <table class="table table-sm table-hover text-center">
+                    <thead>
+                    <tr>
+                        <th>#</th><th>Modelo</th><th>Proveedor</th><th>Estado</th>
+                        <th>Stacker</th><th>Progresivo</th><th>Piso</th><th>Serie</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for m in maquinas %}
+                    <tr>
+                        <td>{{ m.numero }}</td>
+                        <td class="text-truncate-200" title="{{ m.name_modelo }}">{{ m.name_modelo }}</td>
+                        <td class="text-truncate-200" title="{{ m.name_proveedor }}">{{ m.name_proveedor }}</td>
+                        <td>{{ m.estado }}</td>
+                        <td>{{ m.name_stacker }}</td>
+                        <td>{{ m.name_progresivo }}</td>
+                        <td>{{ m.piso }}</td>
+                        <td>{{ m.serie }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <div class="panel-footer">
+                <span class="text-white-50">Total filas (SQL):</span>
+                <strong>{{ maquinas_count }}</strong>
+                </div>
+            </div>
+
+            <!-- Proveedores + Modelos -->
+            <div class="panel panel--proveedores">
+                <div class="panel-header"><i class="fa-solid fa-truck-field"></i> Proveedores y Modelos</div>
+                <div class="panel-body">
+                <table class="table table-sm table-hover text-center">
+                    <thead><tr><th>Proveedor</th><th>Modelo</th></tr></thead>
+                    <tbody>
+                    {% for r in proveedores_modelos %}
+                    <tr>
+                        <td class="text-truncate-200" title="{{ r.name_proveedor }}">{{ r.name_proveedor }}</td>
+                        <td class="text-truncate-260" title="{{ r.name_modelo }}">{{ r.name_modelo }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <div class="panel-footer">
+                <span class="text-white-50">Total filas (SQL):</span>
+                <strong>{{ proveedores_modelos_count }}</strong>
+                </div>
+            </div>
+
+            <!-- Tipo de cambio -->
+            <div class="panel panel--tipocambio">
+                <div class="panel-header"><i class="fa-solid fa-dollar-sign"></i> Tipo de cambio</div>
+                <div class="panel-body">
+                <table class="table table-sm table-hover text-center">
+                    <thead><tr><th>Año</th><th>Mes</th><th>Valor</th></tr></thead>
+                    <tbody>
+                    {% for t in tipo_cambio %}
+                    <tr>
+                        <td>{{ t.anio }}</td>
+                        <td>{{ t.mes }}</td>
+                        <td>{{ t.valor_cambio }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <div class="panel-footer">
+                <span class="text-white-50">Total filas (SQL):</span>
+                <strong>{{ tipo_cambio_count }}</strong>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

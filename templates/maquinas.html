@@ -1,0 +1,422 @@
+<!-- templates/maquinas.html -->
+{% extends "base.html" %}
+{% block titulo %}Máquinas{% endblock %}
+
+{% block contenido %}
+  <style>
+    :root{
+      --bg: #0f0f0f;
+      --panel: #141414;
+      --muted: #bdbdbd;
+      --gap: 12px;
+      --row-metrics: .6fr;   /* altura relativa métricas (>= lg) */
+      --row-tables: 2.4fr;   /* altura relativa tablas   (>= lg) */
+    }
+    /* ===== Base: MÓVIL/TABLET (scroll global permitido) ===== */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: #f8f9fa;
+      overflow: auto;
+    }
+    /* Ajuste del contenedor correcto */
+    .page-in{
+      min-height: 100vh;
+      display: grid;
+      gap: var(--gap);
+      padding: var(--gap);
+      box-sizing: border-box;
+    }
+    /* Pointer en filas */
+    #tblMaquinas tbody tr { cursor: pointer; }
+  </style>
+
+  <div class="page-in">
+    <!-- Header: título + filtro + agregar -->
+    <section class="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
+      <div class="d-flex align-items-start gap-2" style="flex-direction: column;">
+        <h2 class="h4 m-0" style="color: #f8f9fa;">Máquinas</h2>
+        <span class="text-white-50 small">Total: {{ maquinas_activas }}</span>
+      </div>
+
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group input-group-sm" style="width: 220px;">
+          <label class="input-group-text bg-dark text-white-50 border-secondary" for="filtroEstado">
+            <i class="fa-solid fa-filter"></i>
+          </label>
+          <select id="filtroEstado" class="form-select bg-dark text-light border-secondary">
+            <option value="">Todos</option>
+            <option value="Activo" {{ 'selected' if filtro_estado=='Activo' else '' }}>Activo</option>
+            <option value="Inactivo" {{ 'selected' if filtro_estado=='Inactivo' else '' }}>Inactivo</option>
+          </select>
+        </div>
+
+        <button id="btnAdd" type="button" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus me-1"></i> Agregar máquina
+        </button>
+      </div>
+    </section>
+
+    <!-- Panel con tabla -->
+    <section class="panel">
+      <div class="panel-header"><i class="fa-solid fa-table"></i> Listado</div>
+      <div class="panel-body">
+        <table id="tblMaquinas" class="table table-sm table-hover">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Modelo</th>
+              <th>Proveedor</th>
+              <th>Estado</th>
+              <th>Jackpot</th>
+              <th>Stacker</th>
+              <th>Kit Wigos</th>
+              <th>Progresivo</th>
+              <th>Piso</th>
+              <th>Serie</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in maquinas %}
+            <tr data-id="{{ m.id_maquina }}" data-estado="{{ m.estado }}" data-numero = "{{ m.numero }}">
+              <td class="dbl">{{ m.numero }}</td>
+              <td class="dbl text-truncate-200" title="{{ m.name_modelo }}">{{ m.name_modelo }}</td>
+              <td class="dbl text-truncate-200" title="{{ m.name_proveedor }}">{{ m.name_proveedor }}</td>
+              <td class="dbl">{{ m.estado }}</td>
+              <td class="dbl">{{ m.name_jackpot or 'Ninguno' }}</td>
+              <td class="dbl">{{ m.name_stacker or 'Ninguno' }}</td>
+              <td class="dbl">{{ m.name_kit or 'Ninguno' }}</td>
+              <td class="dbl">{{ m.name_progresivo or 'Ninguno' }}</td>
+              <td class="dbl">{{ m.piso }}</td>
+              <td class="dbl">{{ m.serie }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-footer">
+        <span class="text-white-50">Doble click en una fila para ver/modificar</span>
+        <strong>{{ maquinas_count }}</strong>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal Agregar/Editar -->
+  <div class="modal fade" id="modalMaquina" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content bg-dark text-light border-secondary rounded-4">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">
+            <i class="fa-solid fa-gear me-2"></i><span id="modalTitulo">Detalle de máquina</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <form id="frmMaquina" class="row g-3">
+            <input type="hidden" id="id_maquina">
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Modelo</label>
+              <select id="id_modelo" class="form-select bg-dark text-light border-secondary">
+                <option value="">Ninguno</option>
+                {% for x in modelos %}
+                <option value="{{ x.id_modelo }}">{{ x.name_modelo }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Número</label>
+              <input id="numero" type="text" class="form-control bg-dark text-light border-secondary" required>
+              <div class="invalid-feedback">El número es obligatorio.</div>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Estado</label>
+              <select id="id_estado" class="form-select bg-dark text-light border-secondary">
+                {% for x in estados %}
+                <option value="{{ x.id_estado }}">{{ x.estado }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Tipo de Jackpot</label>
+              <select id="id_tipo" class="form-select bg-dark text-light border-secondary">
+                {% for x in tipo_jackpots %}
+                <option value="{{ x.id_tipo }}">{{ x.name_jackpot }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Stacker</label>
+              <select id="id_stacker" class="form-select bg-dark text-light border-secondary">
+                {% for x in tipo_stacker %}
+                <option value="{{ x.id_stacker }}">{{ x.name_stacker }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Kit de Wigos</label>
+              <select id="id_kit" class="form-select bg-dark text-light border-secondary">
+                {% for x in kit_wigos %}
+                <option value="{{ x.id_kit }}">{{ x.name_kit }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Piso</label>
+              <select id="piso" class="form-select bg-dark text-light border-secondary">
+                <option value="">Ninguno</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Progresivo</label>
+              <select id="id_progresivo" class="form-select bg-dark text-light border-secondary">
+                {% for x in progresivos %}
+                <option value="{{ x.id_progresivo }}">{{ x.name_progresivo }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label">Serie</label>
+              <input id="serie" type="text" class="form-control bg-dark text-light border-secondary">
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer border-secondary">
+          {% if rol == 'Admin' %}
+            <button id="btnDelete" type="button" class="btn btn-outline-danger me-auto">
+              <i class="fa-solid fa-trash"></i> Eliminar
+            </button>
+            <button id="btnSave" type="button" class="btn btn-primary">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+            </button>
+          {% else %}
+            <span class="text-white-50 small me-auto">
+              <i class="fa-solid fa-lock me-1"></i> Solo lectura (no eres Admin)
+            </span>
+          {% endif %}
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // ===== Boot =====
+  const isAdmin = {{ (rol == 'Admin') | tojson }};
+  const modalEl = document.getElementById('modalMaquina');
+  const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+  // ===== Utilidades =====
+  const toIntOrNull = v => (v === '' || v === null || v === undefined) ? null : parseInt(v, 10);
+
+  function createToastContainer(){
+    let c = document.querySelector('.toast-container');
+    if (!c){
+      c = document.createElement('div');
+      c.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+      c.style.zIndex = 2000;
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
+  // Reescritura SIN destructuring con defaults (evita el error del editor)
+  function showToast(opts){
+    const def = { title: 'Información', body: '', variant: 'success', delay: 3500 };
+    const p = Object.assign({}, def, opts || {});
+    const icons = {
+      success: 'text-success fa-circle-check',
+      error:   'text-danger fa-circle-xmark',
+      warning: 'text-warning fa-triangle-exclamation',
+      info:    'text-info fa-circle-info'
+    };
+    const icon = icons[p.variant] || icons.info;
+
+    const container = createToastContainer();
+    const id = 't'+Date.now();
+    container.insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center bg-dark border-secondary rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header border-secondary">
+          <i class="fa-solid ${icon} me-2"></i>
+          <strong class="me-auto">${p.title}</strong>
+          <small class="text-white-50">ahora</small>
+          <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+        <div class="toast-body">${p.body}</div>
+      </div>`);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, { delay: p.delay, autohide: true }).show();
+    el.addEventListener('hidden.bs.toast', ()=> el.remove());
+  }
+
+  function setFieldValue(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    // 1) por value (string)
+    const val = (v === null || v === undefined) ? '' : String(v);
+    el.value = val;
+    // 2) fallback por texto visible si es SELECT
+    if (el.tagName === 'SELECT' && el.value !== val && val) {
+      const hit = Array.from(el.options).find(o => o.textContent.trim() === String(v).trim());
+      if (hit) el.value = hit.value;
+    }
+  }
+
+  function setModalTitle(t){ document.getElementById('modalTitulo').textContent = t; }
+  function clearForm(){ document.querySelectorAll('#frmMaquina input, #frmMaquina select').forEach(el => el.value = ''); }
+  function fillForm(d){
+    setFieldValue('id_maquina',    d.id_maquina);
+    setFieldValue('id_modelo',     d.id_modelo);
+    setFieldValue('numero',        d.numero);
+    setFieldValue('id_estado',     d.id_estado);     // ← ya no queda en blanco
+    setFieldValue('id_tipo',       d.id_tipo);
+    setFieldValue('id_stacker',    d.id_stacker);
+    setFieldValue('id_kit',        d.id_kit);
+    setFieldValue('piso',          d.piso);
+    setFieldValue('id_progresivo', d.id_progresivo);
+    setFieldValue('serie',         d.serie);
+  }
+  function getFormData(){
+    return {
+      id_maquina:    toIntOrNull(document.getElementById('id_maquina').value),
+      id_modelo:     toIntOrNull(document.getElementById('id_modelo').value),
+      numero:        document.getElementById('numero').value || null,
+      id_estado:     toIntOrNull(document.getElementById('id_estado').value),
+      id_tipo:       toIntOrNull(document.getElementById('id_tipo').value),
+      id_stacker:    toIntOrNull(document.getElementById('id_stacker').value),
+      id_kit:        toIntOrNull(document.getElementById('id_kit').value),
+      piso:          toIntOrNull(document.getElementById('piso').value),
+      id_progresivo: toIntOrNull(document.getElementById('id_progresivo').value),
+      serie:         document.getElementById('serie').value || null
+    };
+  }
+  function toggleFormDisabled(disabled){
+    document.querySelectorAll('#frmMaquina input, #frmMaquina select').forEach(el => el.disabled = disabled);
+  }
+
+  function validateForm(){
+    const numero = document.getElementById('numero');
+    let ok = true;
+    if (!numero.value.trim()){ numero.classList.add('is-invalid'); ok = false; }
+    else { numero.classList.remove('is-invalid'); numero.classList.add('is-valid'); }
+    return ok;
+  }
+  function resetValidation(){
+    document.querySelectorAll('#frmMaquina .is-invalid, #frmMaquina .is-valid')
+      .forEach(el => el.classList.remove('is-invalid','is-valid'));
+  }
+  modalEl?.addEventListener('show.bs.modal', resetValidation);
+  document.querySelectorAll('#frmMaquina input, #frmMaquina select').forEach(el => {
+    el.addEventListener('input', ()=> el.classList.remove('is-invalid'));
+  });
+
+  // ===== Filtro por estado =====
+  const filtro = document.getElementById('filtroEstado');
+  filtro?.addEventListener('change', e => {
+    const v = e.target.value;
+    const url = new URL(window.location.href);
+    if (v) url.searchParams.set('estado', v); else url.searchParams.delete('estado');
+    window.location.href = url.toString();
+  });
+
+  // ===== Doble click en fila =====
+  const tbody = document.querySelector('#tblMaquinas tbody');
+  if (tbody && modal){
+    tbody.addEventListener('dblclick', async ev => {
+      const tr = ev.target.closest('tr'); if (!tr) return;
+      const id = tr.dataset.id;
+      setModalTitle('Detalle de máquina #' + id);
+      resetValidation(); clearForm(); toggleFormDisabled(!isAdmin);
+
+      const r = await fetch(`{{ url_for('api_maquina_detalle', id=0) }}`.replace('0', id));
+      const d = await r.json();
+      fillForm(d);
+
+      if (!isAdmin) {
+        document.getElementById('btnSave')?.classList.add('d-none');
+        document.getElementById('btnDelete')?.classList.add('d-none');
+      } else {
+        document.getElementById('btnSave')?.classList.remove('d-none');
+        document.getElementById('btnDelete')?.classList.remove('d-none');
+      }
+      modal.show();
+    });
+  }
+
+  // ===== Agregar =====
+  document.getElementById('btnAdd')?.addEventListener('click', () => {
+    if (!modal) return;
+    setModalTitle('Agregar máquina');
+    resetValidation(); clearForm(); toggleFormDisabled(!isAdmin);
+    document.getElementById('id_maquina').value = '';
+    if (isAdmin){
+      document.getElementById('btnSave')?.classList.remove('d-none');
+      document.getElementById('btnDelete')?.classList.add('d-none');
+    }
+    modal.show();
+  });
+
+  // ===== Guardar (crear/actualizar) =====
+  document.getElementById('btnSave')?.addEventListener('click', async () => {
+    if (!validateForm()){
+      showToast({ title:'Formulario incompleto', body:'Revisa los campos obligatorios.', variant:'warning' });
+      return;
+    }
+    const payload = getFormData();
+    const isNew = !payload.id_maquina;
+    const url = isNew ? `{{ url_for('api_maquina_crear') }}` :
+                        `{{ url_for('api_maquina_actualizar', id=0) }}`.replace('0', payload.id_maquina);
+    const method = isNew ? 'POST' : 'PUT';
+
+    try{
+      const r = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      const res = await r.json();
+      if (res.ok){
+        showToast({ title: isNew?'Creada':'Guardada', body:'Operación exitosa.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'Error', body: res.msg || 'No se pudo guardar.', variant:'error' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+
+  // ===== Eliminar =====
+  document.getElementById('btnDelete')?.addEventListener('click', async () => {
+    const id = document.getElementById('id_maquina').value;
+    if (!id) return;
+    if (!confirm('¿Seguro que deseas eliminar la máquina #'+id+'?')) return;
+
+    try{
+      const r = await fetch(`{{ url_for('api_maquina_eliminar', id=0) }}`.replace('0', id), { method:'DELETE' });
+      const res = await r.json();
+      if (res.ok){
+        showToast({ title:'Eliminada', body:'La máquina fue eliminada.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'No eliminado', body: res.msg || 'No se pudo eliminar.', variant:'warning' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+
+}); // DOMContentLoaded
+</script>
+
+{% endblock %}
+
