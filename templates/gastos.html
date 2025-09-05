@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block titulo %}Gastos{% endblock %}
+{% block contenido %}
+<style>
+  :root { --gap:12px; --panel:#141414; --muted:#bdbdbd; }
+  .page-in{ height:100%; min-height:0; display:grid; grid-template-rows:auto 1fr; gap:var(--gap); padding:var(--gap); }
+  .filters{
+    display:grid; gap:var(--gap);
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 768px){
+    .filters{ grid-template-columns: repeat(4,1fr); }
+  }
+  .panel{ background:var(--panel); border:1px solid rgba(255,255,255,.06); border-radius:16px; display:flex; flex-direction:column; min-height:0; color:#f8f9fa; box-shadow:0 6px 20px rgba(0,0,0,.35); }
+  .panel-header{ padding:.85rem 1rem; border-bottom:1px solid rgba(255,255,255,.06); display:flex; align-items:center; gap:.6rem; font-weight:600; flex-shrink:0; }
+  .panel-body{ flex:1; min-height:0; overflow:auto; }
+  .panel-footer{ border-top:1px solid rgba(255,255,255,.06); color:#bdbdbd; padding:.5rem .9rem; font-size:.875rem; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  table.table{ color:#e9ecef; margin-bottom:0; width:100%; table-layout:auto; }
+  table thead th{ position:sticky; top:0; z-index:1; background:#1b1b1b; border-bottom:1px solid rgba(255,255,255,.12); color:#b9b9b9; }
+  table tbody tr:hover{ background:rgba(255,255,255,.03); cursor:pointer; }
+  .toast-container{ z-index:11000; }
+
+  /* en estilos.css o en el <style> de la página */
+    .panel-footer strong { color:#f8f9fa; }
+    .panel-footer .vr { height: 1rem; }
+
+</style>
+
+<div class="page-in">
+  <!-- Filtros -->
+  <form class="panel" method="get">
+    <div class="panel-header">
+      <i class="fa-solid fa-filter"></i> <span>Filtros</span>
+    </div>
+    <div class="panel-body">
+      <div class="filters">
+        <!-- Año -->
+        <div>
+          <label class="form-label">Año</label>
+          <select name="anio" class="form-select bg-dark text-light border-secondary">
+            <option value="">Todos</option>
+            {% for a in anios %}
+              <option value="{{ a }}" {{ 'selected' if anio_sel==a|string else '' }}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <!-- Mes -->
+        <div>
+          <label class="form-label">Mes</label>
+          <select name="mes" class="form-select bg-dark text-light border-secondary">
+            <option value="">Todos</option>
+            {% for m in meses %}
+              <option value="{{ m }}" {{ 'selected' if mes_sel==m else '' }}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <!-- Modelo -->
+        <div>
+          <label class="form-label">Modelo</label>
+          <select name="modelo" class="form-select bg-dark text-light border-secondary">
+            <option value="">Todos</option>
+            {% for mo in modelos %}
+              <option value="{{ mo.id_modelo }}" {{ 'selected' if modelo_sel==mo.id_modelo|string else '' }}>
+                {{ mo.name_modelo }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <!-- Acciones -->
+        <div class="d-flex align-items-end gap-2">
+          <a href="{{ url_for('gastos') }}" class="btn btn-outline-secondary w-100">
+            <i class="fa-solid fa-rotate-left"></i> Limpiar
+          </a>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="fa-solid fa-filter"></i> Filtrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Tabla de gastos -->
+  <section class="panel">
+    <div class="panel-header">
+      <i class="fa-solid fa-money-bill-wave"></i> <span>Gastos</span>
+      <div class="ms-auto d-flex gap-2">
+        <button id="btnAdd" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus"></i> Nuevo
+        </button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <table id="tblGastos" class="table table-sm table-hover text-center">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Máquina</th>
+            <th>Modelo</th>
+            <th>Detalle</th>
+            <th class="">Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in gastos %}
+            <tr data-id="{{ g.id_gasto }}">
+              <td class="dbl">{{ g.fecha }}</td>
+              <td class="dbl">#{{ g.maquina_numero }}</td>
+              <td class="dbl">{{ g.name_modelo or '-' }}</td>
+              <td class="dbl">{{ g.detalle }}</td>
+              <td class="dbl">¢ {{ "{:,.2f}".format(g.monto|float) }}</td>
+
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-center text-muted small">Sin registros</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-footer">
+        <div class="d-flex w-100 align-items-center justify-content-between flex-wrap gap-2">
+            <span class="text-white-50 small">Doble click en una fila para editar</span>
+
+            <div class="d-flex align-items-center gap-3 ms-auto">
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-white-50 small">Total:</span>
+                <strong class="small">
+                ¢ {{ "{:,.2f}".format(total_gastos|float) }}
+                </strong>
+            </div>
+            <div class="vr text-white-50" style="opacity:.25;"></div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-white-50 small">Registros:</span>
+                <strong class="small">{{ gastos|length }}</strong>
+            </div>
+            </div>
+        </div>
+    </div>
+
+  </section>
+</div>
+
+<!-- Modal Crear/Editar -->
+<div class="modal fade" id="modalGasto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary rounded-4">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title"><i class="fa-solid fa-gear me-2"></i><span id="modalTitulo">Gasto</span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <form id="frmGasto" class="row g-3">
+          <input type="hidden" id="id_gasto">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Fecha</label>
+            <input id="fecha" type="date" class="form-control bg-dark text-light border-secondary" required>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Máquina</label>
+            <select id="maquina" class="form-select bg-dark text-light border-secondary" required>
+              <option value="">Seleccionar...</option>
+              {% for g in maquinas %}
+                <option value="{{ g.id_maquina }}">{{ g.numero }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Detalle</label>
+            <input id="detalle" type="text" class="form-control bg-dark text-light border-secondary" required>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Monto</label>
+            <input id="monto" type="number" step="0.01" min="0" class="form-control bg-dark text-light border-secondary" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-secondary">
+        {% if rol == 'Admin' %}
+          <button id="btnDelete" type="button" class="btn btn-outline-danger me-auto">
+            <i class="fa-solid fa-trash"></i> Eliminar
+          </button>
+          <button id="btnSave" type="button" class="btn btn-primary">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+          </button>
+        {% elif rol == 'Administrador' %}
+          <!-- Administrador: solo crear (no editar/eliminar) -->
+          <span class="text-white-50 small me-auto"><i class="fa-solid fa-lock me-1"></i> Solo puedes crear</span>
+          <button id="btnSave" type="button" class="btn btn-primary">Guardar</button>
+        {% else %}
+          <span class="text-white-50 small me-auto">Sin permisos de edición</span>
+        {% endif %}
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', ()=>{
+  const isAdmin = {{ (rol == 'Admin') | tojson }};
+  const isAdministrador = {{ (rol == 'Administrador') | tojson }};
+  const modalEl = document.getElementById('modalGasto');
+  const modal = new bootstrap.Modal(modalEl);
+
+  function showToast({ title='Información', body='', variant='success', delay=1800 } = {}){
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success:'text-success fa-circle-check',
+      error:'text-danger fa-circle-xmark',
+      warning:'text-warning fa-triangle-exclamation',
+      info:'text-info fa-circle-info'
+    };
+    const icon = icons[variant] || icons.info;
+    const id = 't'+Date.now();
+    container.insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center bg-dark border-secondary rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header border-secondary">
+          <i class="fa-solid ${icon} me-2"></i>
+          <strong class="me-auto">${title}</strong>
+          <small class="text-white-50">ahora</small>
+          <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+        <div class="toast-body">${body}</div>
+      </div>
+    `);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, { delay, autohide:true }).show();
+    el.addEventListener('hidden.bs.toast', ()=> el.remove());
+  }
+
+  function clearForm(){
+    document.getElementById('id_gasto').value='';
+    document.getElementById('fecha').value='';
+    document.getElementById('maquina').value='';
+    document.getElementById('detalle').value='';
+    document.getElementById('monto').value='';
+  }
+    function fillForm(d){
+    document.getElementById('id_gasto').value = d.id_gasto || '';
+    document.getElementById('fecha').value = d.fecha || '';  // ahora vendrá YYYY-MM-DD
+    document.getElementById('maquina').value = d.id_maquina || ''; // clave corregida
+    document.getElementById('detalle').value = d.detalle || '';
+    document.getElementById('monto').value = d.monto ?? '';
+    }
+  function getFormData(){
+    return {
+      id_gasto: document.getElementById('id_gasto').value || null,
+      fecha: document.getElementById('fecha').value,
+      maquina: document.getElementById('maquina').value,
+      detalle: document.getElementById('detalle').value,
+      monto: document.getElementById('monto').value
+    };
+  }
+
+  // Abrir modal para crear
+  document.getElementById('btnAdd').addEventListener('click', ()=>{
+    clearForm();
+    document.getElementById('modalTitulo').textContent = 'Nuevo gasto';
+    // Permisos: si es Administrador puede crear; si es Admin, puede todo
+    document.getElementById('btnSave')?.classList.remove('d-none');
+    document.getElementById('btnDelete')?.classList.add('d-none');
+    modal.show();
+  });
+
+  // Doble click para editar (solo Admin)
+  const tbody = document.querySelector('#tblGastos tbody');
+  tbody.addEventListener('dblclick', async (ev)=>{
+    const tr = ev.target.closest('tr'); if (!tr) return;
+    const id = tr.dataset.id;
+    try{
+      const r = await fetch(`/api/gastos/${id}`);
+      const d = await r.json();
+      fillForm(d);
+      document.getElementById('modalTitulo').textContent = 'Editar gasto #' + id;
+      if (isAdmin){
+        document.getElementById('btnDelete')?.classList.remove('d-none');
+        document.getElementById('btnSave')?.classList.remove('d-none');
+      } else {
+        // Administrador u otros: solo ver (sin guardar/eliminar)
+        document.getElementById('btnDelete')?.classList.add('d-none');
+        if (isAdministrador){
+          // Puede crear, pero aquí está editando → no permitir guardar cambios
+          document.getElementById('btnSave')?.classList.add('d-none');
+        } else {
+          document.getElementById('btnSave')?.classList.add('d-none');
+        }
+      }
+      modal.show();
+    }catch(e){
+      showToast({ title:'Error', body:'No se pudo cargar el registro.', variant:'error' });
+    }
+  });
+
+  // Guardar (crear o actualizar)
+  document.getElementById('btnSave')?.addEventListener('click', async ()=>{
+    const data = getFormData();
+    const isNew = !data.id_gasto;
+
+    if (!data.fecha || !data.maquina || !data.detalle || !data.monto){
+      showToast({ title:'Incompleto', body:'Todos los campos son obligatorios.', variant:'warning' });
+      return;
+    }
+
+    const url = isNew ? '/api/gastos' : `/api/gastos/${data.id_gasto}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    try{
+      const r = await fetch(url, {
+        method,
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+      });
+      const j = await r.json();
+      if (j.ok){
+        showToast({ title: isNew?'Creado':'Actualizado', body:'Operación exitosa.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'Error', body: j.msg || 'No se pudo guardar.', variant:'error' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+
+  // Eliminar
+  document.getElementById('btnDelete')?.addEventListener('click', async ()=>{
+    const id = document.getElementById('id_gasto').value;
+    if (!id) return;
+    if (!confirm('¿Seguro que deseas eliminar el gasto #'+id+'?')) return;
+    try{
+      const r = await fetch(`/api/gastos/${id}`, { method:'DELETE' });
+      const j = await r.json();
+      if (j.ok){
+        showToast({ title:'Eliminado', body:'Registro eliminado correctamente.', variant:'success' });
+        setTimeout(()=>location.reload(), 600);
+      } else {
+        showToast({ title:'No eliminado', body: j.msg || 'No se pudo eliminar.', variant:'warning' });
+      }
+    }catch(e){
+      showToast({ title:'Error de red', body:'Intenta nuevamente.', variant:'error' });
+    }
+  });
+});
+</script>
+{% endblock %}

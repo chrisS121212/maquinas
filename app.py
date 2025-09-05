@@ -149,6 +149,20 @@ def normaliza_mes_nombre(mes_str: str) -> str | None:
             return nombre  # normalizado, con mayúscula inicial
     return None
 
+def parse_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+def parse_date(v):
+    # Espera 'YYYY-MM-DD' desde el input type="date"
+    try:
+        from datetime import datetime
+        return datetime.strptime(v, '%Y-%m-%d').date()
+    except Exception:
+        return None
+
 
 # -----------------------------
 # Rutas de autenticación
@@ -229,7 +243,7 @@ def inicio():
     ) or {"wigos_55": 0, "wigos_64": 0}
 
     maquinas = query_todos(
-        "SELECT m.numero, mo.name_modelo, pr.name_proveedor, e.estado, ts.name_stacker, p.name_progresivo, m.piso, m.serie FROM maquinas m LEFT JOIN modelos mo ON mo.id_modelo = m.id_modelo LEFT JOIN proveedores pr ON pr.id_proveedor = mo.id_proveedor LEFT JOIN estado e ON e.id_estado = m.id_estado LEFT JOIN tipo_stacker ts ON ts.id_stacker = m.id_stacker LEFT JOIN progresivos p ON p.id_progresivo = m.id_progresivo ORDER BY m.numero LIMIT 1000"
+        "SELECT m.numero, mo.name_modelo, pr.name_proveedor, e.estado, ts.name_stacker, p.name_progresivo, m.piso, m.serie FROM maquinas m LEFT JOIN modelos mo ON mo.id_modelo = m.id_modelo LEFT JOIN proveedores pr ON pr.id_proveedor = mo.id_proveedor LEFT JOIN estado e ON e.id_estado = m.id_estado LEFT JOIN tipo_stacker ts ON ts.id_stacker = m.id_stacker LEFT JOIN progresivos p ON p.id_progresivo = m.id_progresivo WHERE e.estado = 'Activo' ORDER BY m.numero LIMIT 1000"
     )
     maquinas_count = query_valor("SELECT COUNT(*) FROM maquinas") or 0
 
@@ -689,6 +703,208 @@ def api_tipo_cambio_eliminar(id_cambio):
         return jsonify({'ok': False, 'msg': 'No encontrado'}), 404
     ok, _ = exec_sql_returning("DELETE FROM tipo_cambio WHERE id_cambio=%s RETURNING id_cambio", (id_cambio,))
     return jsonify({'ok': bool(ok)})
+
+# --- Gastos ---
+
+@app.route('/gastos')
+def gastos():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+
+    # Parámetros de filtro
+    anio = request.args.get('anio')        # '2025' o ''/None
+    mes  = request.args.get('mes')         # 'Enero'..'Diciembre' o ''/None o 'Todos'
+    modelo_id = request.args.get('modelo') # id_modelo o ''/None
+
+    # Catálogos para selects
+    modelos = query_todos("SELECT id_modelo, name_modelo FROM modelos ORDER BY name_modelo")
+    # Años existentes en gastos
+    anios = query_todos("""
+        SELECT DISTINCT EXTRACT(YEAR FROM fecha)::int AS anio
+        FROM gastos
+        ORDER BY anio DESC
+    """)
+    # --- Catálogo de meses para mapping nombre -> número ---
+    MESES_NOMBRE = [
+        "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+        "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+    ]
+
+    # ------------------ Filtros ------------------
+    where = []
+    params = []
+
+    # Año
+    if anio:
+        where.append("EXTRACT(YEAR FROM g.fecha)::int = %s")
+        params.append(int(anio))
+
+    # Mes (nombre -> número)
+    if mes and mes != "Todos":
+        mes_norm = (mes or "").strip().capitalize()
+        mes_num = None
+        try:
+            mes_num = MESES_NOMBRE.index(mes_norm) + 1  # 1..12
+        except ValueError:
+            mes_num = None
+
+        if mes_num:
+            where.append("EXTRACT(MONTH FROM g.fecha)::int = %s")
+            params.append(mes_num)
+        # si no mapea, simplemente no añadimos filtro de mes
+
+    # Modelo
+    if modelo_id:
+        where.append("mo.id_modelo = %s")
+        params.append(int(modelo_id))
+
+    # ... código anterior para filtros ...
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    # Consulta principal (tabla)
+    gastos_list = query_todos(f"""
+        SELECT
+        g.id_gasto,
+        g.fecha,
+        g.monto,
+        g.detalle,
+        m.id_maquina,
+        m.numero AS maquina_numero,
+        mo.id_modelo,
+        mo.name_modelo,
+        pr.name_proveedor
+        FROM gastos g
+        JOIN maquinas m  ON m.id_maquina = g.id_maquina
+        LEFT JOIN modelos mo ON mo.id_modelo = m.id_modelo
+        LEFT JOIN proveedores pr ON pr.id_proveedor = mo.id_proveedor
+        {where_sql}
+        ORDER BY g.fecha DESC, g.id_gasto DESC
+        LIMIT 5000
+    """, tuple(params))
+
+    #maquinas
+    maquinas = query_todos("SELECT id_maquina, numero FROM maquinas ORDER BY numero")
+
+    # >>> NUEVO: total filtrado
+    total_gastos = query_valor(f"""
+        SELECT COALESCE(SUM(g.monto), 0)
+        FROM gastos g
+        JOIN maquinas m  ON m.id_maquina = g.id_maquina
+        LEFT JOIN modelos mo ON mo.id_modelo = m.id_modelo
+        {where_sql}
+    """, tuple(params)) or 0.0
+
+    # Para selects (pre-selección)
+    anio_sel = str(anio) if anio else ""
+    mes_sel = mes if mes else ""
+    modelo_sel = str(modelo_id) if modelo_id else ""
+
+    return render_template(
+        'gastos.html',
+        usuario=session['usuario'],
+        rol=session.get('rol'),
+        modelos=modelos,
+        anios=[r['anio'] for r in anios],
+        meses=MESES_NOMBRE,
+        gastos=gastos_list,
+        anio_sel=anio_sel,
+        mes_sel=mes_sel,
+        modelo_sel=modelo_sel,
+        total_gastos=total_gastos,   # <<< pásalo al template
+        maquinas=maquinas
+)
+
+
+@app.route('/api/gastos/<int:id_gasto>', methods=['GET'])
+def api_gasto_detalle(id_gasto):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg':'No autenticado'}), 401
+
+    row = query_uno("""
+        SELECT 
+          g.id_gasto,
+          g.id_maquina AS id_maquina,
+          TO_CHAR(g.fecha, 'YYYY-MM-DD') AS fecha,
+          g.detalle,
+          g.monto
+        FROM gastos g
+        WHERE g.id_gasto = %s
+    """, (id_gasto,))
+
+    if not row:
+        return jsonify({'ok': False, 'msg':'No encontrado'}), 404
+
+    return jsonify(row)
+
+
+@app.route('/api/gastos', methods=['POST'])
+def api_gasto_crear():
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg':'No autenticado'}), 401
+    # "Administrador" puede crear; Admin también
+    if session.get('rol') not in ('Administrador', 'Admin'):
+        return jsonify({'ok': False, 'msg':'No autorizado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    maquina = data.get('maquina')  # id_maquina
+    detalle = (data.get('detalle') or '').strip()
+    fecha = parse_date(data.get('fecha'))
+    monto = parse_float(data.get('monto'))
+
+    if not (maquina and detalle and fecha and monto is not None):
+        return jsonify({'ok': False, 'msg':'Campos requeridos: maquina, detalle, fecha, monto'}), 400
+
+    ok, last_id = exec_sql_returning("""
+        INSERT INTO gastos (id_maquina, detalle, fecha, monto)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id_gasto
+    """, (int(maquina), detalle, fecha, monto))
+    return (jsonify({'ok': True, 'id': last_id})
+            if ok else (jsonify({'ok': False, 'msg':'Error al crear'}), 500))
+
+@app.route('/api/gastos/<int:id_gasto>', methods=['PUT'])
+def api_gasto_actualizar(id_gasto):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg':'No autenticado'}), 401
+    # "Administrador" NO puede editar; solo Admin
+    if session.get('rol') != 'Admin':
+        return jsonify({'ok': False, 'msg':'Solo Admin puede modificar'}), 403
+
+    data = request.get_json(silent=True) or {}
+    maquina = data.get('maquina')
+    detalle = (data.get('detalle') or '').strip()
+    fecha = parse_date(data.get('fecha'))
+    monto = parse_float(data.get('monto'))
+
+    if not (maquina and detalle and fecha and monto is not None):
+        return jsonify({'ok': False, 'msg':'Campos requeridos: maquina, detalle, fecha, monto'}), 400
+
+    ok, _ = exec_sql_returning("""
+        UPDATE gastos
+        SET id_maquina=%s, detalle=%s, fecha=%s, monto=%s
+        WHERE id_gasto=%s
+        RETURNING id_gasto
+    """, (int(maquina), detalle, fecha, monto, id_gasto))
+    return jsonify({'ok': bool(ok)})
+
+@app.route('/api/gastos/<int:id_gasto>', methods=['DELETE'])
+def api_gasto_eliminar(id_gasto):
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg':'No autenticado'}), 401
+    # "Administrador" NO puede eliminar; solo Admin
+    if session.get('rol') != 'Admin':
+        return jsonify({'ok': False, 'msg':'Solo Admin puede eliminar'}), 403
+
+    ok, _ = exec_sql_returning(
+        "DELETE FROM gastos WHERE id_gasto=%s RETURNING id_gasto",
+        (id_gasto,)
+    )
+    return jsonify({'ok': bool(ok)})
+
+
+
+
+
 
 
 
