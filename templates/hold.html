@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+{% block titulo %}Hold{% endblock %}
+
+{% block contenido %}
+<style>
+/* --- Layout general --- */
+.page-in{
+  height:100%;
+  min-height:0;
+  display:grid;
+  grid-template-rows:auto 1fr;
+  gap:8px;
+  padding:8px;
+}
+
+.panel{
+  background:#141414;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:10px;
+  color:#f8f9fa;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.panel-header{
+  padding:.25rem .5rem;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex; align-items:center; gap:.4rem;
+  font-weight:600;
+  font-size: 1.2rem;
+  line-height:1;
+}
+.panel-body{
+  padding:.3rem .45rem;
+  flex:0 0 auto;
+  min-height:auto;
+  overflow:visible;
+}
+
+.mini-metrics{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap:.4rem;
+  align-items:start;
+}
+
+/* tarjeta */
+.mini-metric{
+  background:#101010;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:6px;
+  padding:1.2rem .35rem;
+  display:flex; align-items:center; gap:.35rem;
+  line-height:1.2;
+}
+
+/* icono */
+.mini-metric .icon{
+  width:20px; height:20px;
+  font-size:.9rem;
+  display:flex; align-items:center; justify-content:center;
+  background:#0b0b0b; border:1px solid rgba(255,255,255,.1);
+  border-radius:4px; color:#9ec5fe;
+}
+
+/* textos */
+.mini-metric small{
+  display:block; font-size:.7rem; line-height:1.1; color:#bdbdbd; margin:0;
+}
+.mini-metric strong{
+  display:block; font-size:.85rem; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+
+/* ---------- Breakpoints ---------- */
+
+/* ≥ 1400px: más aire y legibilidad */
+@media (min-width: 1400px){
+  .mini-metrics{ grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:.5rem; }
+  .mini-metric{ padding:1.2rem .5rem; }
+  .mini-metric .icon{ width:22px; height:22px; font-size:.9rem; }
+  .mini-metric small{ font-size:.75rem; }
+  .mini-metric strong{ font-size:.95rem; }
+}
+
+/* 992px–1399px: tamaño “medio” (por defecto ya sirve, lo dejamos así) */
+
+/* 768px–991px: 3 por fila típicamente */
+@media (max-width: 991.98px){
+  .mini-metrics{ grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+}
+
+/* 576px–767px: 2 por fila, compáctalo un poco */
+@media (max-width: 767.98px){
+  .mini-metrics{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap:.35rem; }
+  .mini-metric{ padding:.22rem .3rem; gap:.3rem; }
+  .mini-metric .icon{ width:18px; height:18px; font-size:.75rem; }
+  .mini-metric small{ font-size:.65rem; }
+  .mini-metric strong{ font-size:.8rem; }
+}
+
+/* < 576px: 1 por fila, muy compacto para móviles */
+@media (max-width: 575.98px){
+  .mini-metrics{ grid-template-columns: 1fr; gap:.3rem; }
+  .mini-metric{ padding:.2rem .28rem; gap:.28rem; border-radius:5px; }
+  .mini-metric .icon{ width:16px; height:16px; font-size:.7rem; border-radius:3px; }
+  .mini-metric small{ font-size:.62rem; }
+  .mini-metric strong{ font-size:.78rem; }
+}
+
+/* Seguridad: evita que algo las estire verticalmente */
+.mini-metrics, .mini-metric { height:auto; }
+
+/* Scroll propio para la lista de modelos en hold */
+.modelos-scroll {
+  max-height: calc(100vh - 350px); /* ajusta según el espacio que quieras */
+  overflow-y: auto;
+  padding-right: 4px; /* espacio para que no tape la barra */
+}
+
+/* Estilo fino para el scrollbar (opcional, solo navegadores webkit) */
+.modelos-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.modelos-scroll::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+.modelos-scroll::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+.modelos-scroll::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Bloques visuales de KPIs con separación y border-radius */
+/* Bloques base */
+.kpi-block{
+  background:#121212;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:.6rem .8rem;
+  display:flex; flex-direction:column; gap:.5rem;
+}
+
+/* Azul para Ingreso */
+.kpi-block--in{
+  border:1px solid #0d6efd;
+  box-shadow:0 0 6px rgba(13,110,253,.35);
+}
+.kpi-block--in .kpi-head .kpi-big{
+  color:#0d6efd;
+}
+
+/* Verde para Win */
+.kpi-block--win{
+  border:1px solid #198754;
+  box-shadow:0 0 6px rgba(25,135,84,.35);
+}
+.kpi-block--win .kpi-head .kpi-big{
+  color:#198754;
+}
+
+/* Encabezado centrado (valor grande) */
+/* Tipos de letra */
+.kpi-head .kpi-big{
+  font-size:1.15rem;
+  line-height:1.1;
+}
+
+/* Fila de 2 elementos con divider vertical al centro en el 2do item */
+.kpi-pair{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:.25rem;
+  align-items:start;
+}
+.kpi-item{
+  text-align: center;
+}
+
+.kpi-item strong{ font-size:.95rem; }
+.kpi-item small{ font-size:.78rem; }
+
+/* Divider vertical entre pares */
+.kpi-divider-start{
+  border-left:1px solid rgba(255, 255, 255, 0.15);
+  padding-left:.75rem;
+}
+
+/* Responsive tweaks */
+@media (max-width: 991.98px){ /* < lg */
+  .kpi-head .kpi-big{ font-size:1.05rem; }
+  .kpi-item strong{ font-size:.9rem; }
+  .kpi-item small{ font-size:.72rem; }
+}
+@media (max-width: 575.98px){ /* < sm: cada bloque a una columna */
+  .kpi-block{ padding:.5rem .6rem; }
+  .kpi-pair{ grid-template-columns:1fr 1fr; gap:.2rem; }
+  .kpi-divider-start{ padding-left:.55rem; }
+}
+
+/* Dorado para Retención */
+.kpi-block--ret{
+  border:1px solid #d4af37;           /* borde dorado */
+  box-shadow:0 0 6px rgba(212,175,55,.35);
+}
+.kpi-block--ret .kpi-head .kpi-big{
+  color:#d4af37;                      /* texto dorado */
+}
+
+
+
+</style>
+
+<div class="page-in">
+  <!-- Panel superior -->
+  <section class="panel hold-metrics">
+    <div class="panel-header">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>Reporte de rendimiento</span>
+        <div class="ms-auto">
+          <button id="btnUploadOpen" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-file-arrow-up me-1"></i> Agregar datos
+          </button>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="mini-metrics">
+            <div class="mini-metric">
+                <div class="icon"><i class="fa-regular fa-calendar"></i></div>
+                <div><small>Fecha</small><strong id="fechaActual">{{ fecha_actual }}</strong></div>
+            </div>
+            <div class="mini-metric">
+                <div class="icon"><i class="fa-solid fa-dollar-sign"></i></div>
+                <div>
+                  <small>Tipo de cambio ({{ tipo_cambio_actual.mes }}-{{ tipo_cambio_actual.anio }})</small>
+                  <strong>¢ <span id="tipoCambioValor">{{ tipo_cambio_actual.valor_cambio }}</span></strong>
+                </div>
+            </div>
+            <div class="mini-metric">
+                <div class="icon"><i class="fa-solid fa-industry"></i></div>
+                <div><small>Máquinas activas</small><strong id="maquinasDistintas">{{ maquinas_distintas }}</strong></div>
+            </div>
+            <div class="mini-metric">
+                <div class="icon"><i class="fa-regular fa-clock"></i></div>
+                <div><small>Cantidad de días</small><strong id="diasPeriodo">{{ dias_periodo }}</strong></div>
+            </div>
+        </div>
+    </div>
+  </section>
+
+  <!-- Contenido -->
+  <section class="panel hold-content">
+    <div class="panel-header">
+      <i class="fa-solid fa-layer-group"></i> <span>Contenido</span>
+    </div>
+
+    <div class="panel-body">
+
+      <!-- FORM: se intercepta por JS -->
+      <form id="holdForm" class="d-flex flex-wrap gap-2 mb-2" method="get" action="{{ url_for('hold') }}">
+        <div>
+          <label class="form-label mb-1 small text-white-50">Año</label>
+          <select name="anio" class="form-select form-select-sm bg-dark text-light border-secondary">
+            {% for a in anios_disponibles %}
+              <option value="{{ a }}" {{ 'selected' if a == anio_sel else '' }}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label mb-1 small text-white-50">Mes</label>
+          <select name="mes" class="form-select form-select-sm bg-dark text-light border-secondary">
+            {% for m in meses_opciones %}
+              <option value="{{ m.num }}" {{ 'selected' if m.num == mes_sel else '' }}>{{ m.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label mb-1 small text-white-50">Día</label>
+          <select name="dia" class="form-select form-select-sm bg-dark text-light border-secondary">
+            <option value="">Todos</option>
+            {% for d in dias_disponibles %}
+              <option value="{{ d }}" {{ 'selected' if d == dia_sel else '' }}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {% if modelo_sel %}
+          <input type="hidden" name="modelo_id" value="{{ modelo_sel }}">
+        {% endif %}
+
+        <div class="align-self-end">
+          <button class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-filter me-1"></i> Aplicar
+          </button>
+          <a id="btnLimpiar" class="btn btn-outline-secondary btn-sm" href="{{ url_for('hold') }}">
+            <i class="fa-solid fa-rotate-left me-1"></i> Limpiar
+          </a>
+        </div>
+      </form>
+
+      <div class="row g-2">
+        <!-- Sidebar modelos -->
+        <div class="col-12 col-lg-2">
+          <div class="panel" style="height: calc(100vh - 260px); min-height: 300px;">
+            <div class="panel-header">
+              <i class="fa-solid fa-list"></i> <span>Modelos en el período</span>
+            </div>
+
+            <div class="panel-body modelos-scroll">
+              <div id="modelosList" class="d-grid gap-2">
+                <!-- Botón "Todos" -->
+                <a data-ajax="modelo"
+                   class="btn btn-sm {{ 'btn-primary' if not modelo_sel else 'btn-outline-secondary' }}"
+                   href="{{ url_for('hold', anio=anio_sel, mes=mes_sel) }}">
+                  <i class="fa-solid fa-layer-group me-1"></i> Todos
+                </a>
+
+                <!-- Botones por modelo -->
+                {% for it in modelos_sidebar %}
+                  <a data-ajax="modelo"
+                     class="btn btn-sm {{ 'btn-primary' if modelo_sel==it.id_modelo else 'btn-outline-secondary' }}"
+                     href="{{ url_for('hold', anio=anio_sel, mes=mes_sel, modelo_id=it.id_modelo) }}">
+                    <i class="fa-solid fa-microchip me-1"></i>
+                    {{ it.name_modelo or 'Sin modelo' }}
+                    <span class="badge text-bg-dark ms-1">{{ it.cant_maquinas_periodo }}</span>
+                  </a>
+                {% else %}
+                  <span class="text-white-50 small">No hay modelos en el período</span>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="panel-footer d-flex justify-content-between">
+              <span class="text-white-50 small">Activas{{ modelo_sel and ' (modelo)' or '' }}:</span>
+              <strong id="maquinasActivasHold">{{ maquinas_activas_hold }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel KPIs -->
+        <div class="col-12 col-lg-10">
+          <div class="panel" style="min-height: 300px;">
+            <div class="panel-header">
+              <i class="fa-solid fa-chart-pie"></i> <span>Resumen del período</span>
+            </div>
+            <div class="panel-body">
+
+              <div class="row g-3 align-items-stretch">
+                <!-- BLOQUE: INGRESO -->
+                <div class="col-12 col-lg-5">
+                  <div class="kpi-block kpi-block--in h-100">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Ingreso</small>
+                      <strong id="kpiIngreso" class="kpi-big">¢{{ "{:,.2f}".format(ingreso_total|float) }}</strong>
+                    </div>
+                    <div class="kpi-pair">
+                      <div class="kpi-item">
+                        <small class="text-white-50 d-block">Avg</small>
+                        <strong id="kpiAvgIn">$ {{ "{:,.2f}".format(avg_net_in|float) }}</strong>
+                        <small class="text-white-50 d-block"><span id="kpiDias">({{ dias_periodo }})</span> Días</small>
+                      </div>
+                      <div class="kpi-item kpi-divider-start">
+                        <small class="text-white-50 d-block">Avg diario</small>
+                        <strong id="kipAvgInDiario">$ {{ "{:,.2f}".format(net_in_diario|float) }}</strong>
+                        <small class="text-white-50 d-block">({{ "{:,.2f}".format(prom_dias_jugado_pos_t|float) }}) Días jugados</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BLOQUE: WIN -->
+                <div class="col-12 col-lg-5">
+                  <div class="kpi-block kpi-block--win h-100">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Win</small>
+                      <strong id="kpiWin" class="kpi-big">¢{{ "{:,.2f}".format(win_total|float) }}</strong>
+                    </div>
+                    <div class="kpi-pair">
+                      <div class="kpi-item">
+                        <small class="text-white-50 d-block">Avg Win</small>
+                        <strong id="kpiAvgWin">$ {{ "{:,.2f}".format(avg_net_win|float) }}</strong>
+                        <small class="text-white-50 d-block">({{ dias_periodo }}) Días</small>
+                      </div>
+                      <div class="kpi-item kpi-divider-start">
+                        <small class="text-white-50 d-block">Avg Win diario</small>
+                        <strong id="kpiWinDiario">$ {{ "{:,.2f}".format(net_win_diario|float) }}</strong>
+                        <small class="text-white-50 d-block">({{ "{:,.2f}".format(prom_dias_jugado_pos_t|float) }}) Días jugados</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BLOQUE: RETENCIÓN -->
+                <div class="col-12 col-lg-2">
+                  <div class="kpi-block kpi-block--ret h-100 d-flex flex-column justify-content-center">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Retención</small>
+                      <strong id="kpiRet" class="kpi-big">{{ "{:,.2f}".format(retencion|float) }}%</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="border-secondary my-3">
+
+              <div class="row g-3 align-items-stretch">
+                <!-- BLOQUE: INGRESO M -->
+                <div class="col-12 col-lg-5">
+                  <div class="kpi-block kpi-block--in h-100">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Ingreso</small>
+                      <strong id="kpiIngresoM" class="kpi-big">¢{{ "{:,.2f}".format(ingreso_total_m|float) }}</strong>
+                    </div>
+                    <div class="kpi-pair">
+                      <div class="kpi-item">
+                        <small class="text-white-50 d-block">Avg</small>
+                        <strong id="kpiAvgInM">$ {{ "{:,.2f}".format(avg_net_in_m|float) }}</strong>
+                        <small class="text-white-50 d-block"><span id="kpiDiasM">({{ dias_periodo }}) Días</span></small>
+                      </div>
+                      <div class="kpi-item kpi-divider-start">
+                        <small class="text-white-50 d-block">Avg diario</small>
+                        <strong id="kipAvgInDiarioM">$ {{ "{:,.2f}".format(net_in_diario_m|float) }}</strong>
+                        <small class="text-white-50 d-block">({{ "{:,.2f}".format(dias_periodo_pos_m|float) }}) Días jugados</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BLOQUE: WIN M -->
+                <div class="col-12 col-lg-5">
+                  <div class="kpi-block kpi-block--win h-100">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Win</small>
+                      <strong id="kpiWinM" class="kpi-big">¢ {{ "{:,.2f}".format(win_total_m|float) }}</strong>
+                    </div>
+                    <div class="kpi-pair">
+                      <div class="kpi-item">
+                        <small class="text-white-50 d-block">Avg Win</small>
+                        <strong id="kpiAvgWinM">$ {{ "{:,.2f}".format(avg_net_win_m|float) }}</strong>
+                        <small class="text-white-50 d-block">({{ dias_periodo }}) Días</small>
+                      </div>
+                      <div class="kpi-item kpi-divider-start">
+                        <small class="text-white-50 d-block">Avg Win diario</small>
+                        <strong id="kpiWinDiarioM">$ {{ "{:,.2f}".format(net_win_diario_m|float) }}</strong>
+                        <small id="kpiDiasPos" class="text-white-50 d-block">({{ "{:,.2f}".format(dias_periodo_pos_m|float) }}) Días jugados</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BLOQUE: RETENCIÓN M -->
+                <div class="col-12 col-lg-2">
+                  <div class="kpi-block kpi-block--ret h-100 d-flex flex-column justify-content-center">
+                    <div class="kpi-head text-center">
+                      <small class="text-white-50 d-block">Retención</small>
+                      <strong id="kpiRetM" class="kpi-big">{{ "{:,.2f}".format(retencion_m|float) }}%</strong>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- Modal: Agregar datos (Excel) -->
+<div class="modal fade" id="modalUpload" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary rounded-4">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title"><i class="fa-solid fa-file-excel me-2"></i> Cargar archivo Excel</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <input id="excelFile" type="file" accept=".xlsx,.xls" class="form-control bg-dark text-light border-secondary">
+        </div>
+        <div id="previewWrap" class="rounded-3 border border-secondary p-2" style="max-height:55vh; overflow:auto; display:none;">
+          <table class="table table-sm table-dark table-hover table-preview">
+            <thead id="previewHead"></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        {% if rol == 'Admin' %}
+          <button id="btnInsert" type="button" class="btn btn-success d-none">
+            <i class="fa-solid fa-database me-1"></i> Insertar
+          </button>
+        {% else %}
+          <span class="text-white-50 small me-auto"><i class="fa-solid fa-lock me-1"></i> Solo Admin puede insertar</span>
+        {% endif %}
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+
+<!-- Toasts -->
+<div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+
+<script>
+  // Usa la ruta que comprobaste en /__routes__
+  const HOLD_DATA_URL = "/api/hold/data";
+  console.log("HOLD_DATA_URL =", HOLD_DATA_URL);
+</script>
+
+<!-- =========== JS: AJAX para filtros y sidebar (sin recargar) =========== -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // ---------- Helpers ----------
+  const fmtMoney = (v, colones=false) => {
+    const n = Number(v||0);
+    const s = n.toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return colones ? `¢${s}` : `$ ${s}`;
+  };
+  const fmtPerc = (v) => `${Number(v||0).toLocaleString('es-CR', { minimumFractionDigits:2, maximumFractionDigits:2 })}%`;
+
+  const buildUrl = ({anio, mes, dia, modelo_id}) => {
+    const p = new URLSearchParams();
+    if (anio) p.set('anio', anio);
+    if (mes)  p.set('mes', mes);
+    if (dia !== '' && dia != null) p.set('dia', dia);
+    if (modelo_id) p.set('modelo_id', modelo_id);
+    const qs = p.toString();
+    return '/hold' + (qs ? `?${qs}` : '');
+  };
+
+  const renderHold = (d) => {
+    const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    setText('fechaActual', d.fecha_actual);
+    setText('tipoCambioValor', Number(d.tipo_cambio_actual.valor_cambio).toLocaleString('es-CR', {minimumFractionDigits:2, maximumFractionDigits:2}));
+    setText('maquinasDistintas', d.maquinas_distintas);
+    setText('diasPeriodo', d.dias_periodo);
+
+    // KPIs (bloque principal)
+    setText('kpiIngreso',     fmtMoney(d.ingreso_total, true));
+    setText('kpiAvgIn',       fmtMoney(d.avg_net_in));
+    setText('kipAvgInDiario', fmtMoney(d.net_in_diario));
+    setText('kpiDias',        `(${d.dias_periodo})`);
+    setText('kpiDiasPos',     Number(d.dias_periodo_post_m||0).toLocaleString('es-CR', { minimumFractionDigits:2, maximumFractionDigits:2 }));
+
+    setText('kpiWin',         fmtMoney(d.win_total, true));
+    setText('kpiAvgWin',      fmtMoney(d.avg_net_win));
+    setText('kpiWinDiario',   fmtMoney(d.net_win_diario));
+    setText('kpiRet',         fmtPerc(d.retencion));
+
+    // KPIs (bloque M)
+    setText('kpiIngresoM',     fmtMoney(d.ingreso_total_m, true));
+    setText('kpiAvgInM',       fmtMoney(d.avg_net_in_m));
+    setText('kipAvgInDiarioM', fmtMoney(d.net_in_diario_m));
+    setText('kpiWinM',         fmtMoney(d.win_total_m));
+    setText('kpiAvgWinM',      fmtMoney(d.avg_net_win_m));
+    setText('kpiWinDiarioM',   fmtMoney(d.net_win_diario_m));
+    setText('kpiRetM',         fmtPerc(d.retencion_m));
+
+    // Sidebar modelos
+    const list = document.getElementById('modelosList');
+    if (list){
+      const active = d.modelo_sel;
+      const mkHref = (p)=> buildUrl(p);
+      const btn = (isActive, href, htmlInner) =>
+        `<a data-ajax="modelo" class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-outline-secondary'}" href="${href}">${htmlInner}</a>`;
+
+      let html = '';
+      html += btn(!active, mkHref({anio:d.anio_sel, mes:d.mes_sel}), `<i class="fa-solid fa-layer-group me-1"></i> Todos`);
+      for (const it of d.modelos_sidebar || []){
+        html += btn(active===it.id_modelo,
+                    mkHref({anio:d.anio_sel, mes:d.mes_sel, modelo_id: it.id_modelo}),
+                    `<i class="fa-solid fa-microchip me-1"></i> ${it.name_modelo || 'Sin modelo'} <span class="badge text-bg-dark ms-1">${it.cant_maquinas_periodo}</span>`);
+      }
+      list.innerHTML = html;
+    }
+    setText('maquinasActivasHold', d.maquinas_activas_hold);
+  };
+
+  const loadHold = async (params, {push=true} = {}) => {
+    const usp = new URLSearchParams();
+    if (params.anio) usp.set('anio', params.anio);
+    if (params.mes)  usp.set('mes', params.mes);
+    if (params.dia !== '' && params.dia != null) usp.set('dia', params.dia);
+    if (params.modelo_id) usp.set('modelo_id', params.modelo_id);
+
+    const url = HOLD_DATA_URL + (usp.toString() ? `?${usp.toString()}` : '');
+    console.log("GET", url);
+
+    document.body.style.cursor = 'progress';
+    try{
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' }});
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.msg || 'Error');
+      renderHold(j.data);
+      if (push) history.pushState(params, '', buildUrl(params));
+    }catch(e){
+      console.error(e);
+      alert('Error cargando datos');
+    }finally{
+      document.body.style.cursor = '';
+    }
+  };
+
+  // Interceptar form
+  const form = document.getElementById('holdForm');
+  if (form){
+    form.addEventListener('submit', (ev)=>{
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const params = {
+        anio:      fd.get('anio') || undefined,
+        mes:       fd.get('mes')  || undefined,
+        dia:       fd.get('dia')  ?? '',
+        modelo_id: fd.get('modelo_id') || undefined
+      };
+      loadHold(params);
+    });
+  }
+
+  // Limpiar
+  const btnLimpiar = document.getElementById('btnLimpiar');
+  if (btnLimpiar){
+    btnLimpiar.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      loadHold({});
+    });
+  }
+
+  // Delegación: botones del sidebar
+  document.addEventListener('click', (ev)=>{
+    const a = ev.target.closest('a[data-ajax="modelo"]');
+    if (!a) return;
+    ev.preventDefault();
+    const url = new URL(a.getAttribute('href'), window.location.origin);
+    loadHold({
+      anio: url.searchParams.get('anio'),
+      mes:  url.searchParams.get('mes'),
+      dia:  url.searchParams.get('dia'),
+      modelo_id: url.searchParams.get('modelo_id')
+    });
+  });
+
+  // Navegación del browser
+  window.addEventListener('popstate', (ev)=>{
+    const st = ev.state || {};
+    loadHold(st, { push:false });
+  });
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const isAdmin = {{ (rol == 'Admin') | tojson }};
+  const modal = new bootstrap.Modal(document.getElementById('modalUpload'));
+  let previewRows = [];  // se llenará tras /api/hold/preview
+  let previewCols = [];
+
+  function showToast({ title='Info', body='', variant='success', delay=2000 } = {}){
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success:'text-success fa-circle-check',
+      error:'text-danger fa-circle-xmark',
+      warning:'text-warning fa-triangle-exclamation',
+      info:'text-info fa-circle-info'
+    };
+    const icon = icons[variant] || icons.info;
+    const id = 't'+Date.now();
+    container.insertAdjacentHTML('beforeend', `
+      <div id="${id}" class="toast align-items-center bg-dark border-secondary rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header border-secondary">
+          <i class="fa-solid ${icon} me-2"></i>
+          <strong class="me-auto">${title}</strong>
+          <small class="text-white-50">ahora</small>
+          <button type="button" class="btn-close btn-close-white ms-2 mb-1" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">${body}</div>
+      </div>
+    `);
+    const el = document.getElementById(id);
+    new bootstrap.Toast(el, { delay, autohide:true }).show();
+    el.addEventListener('hidden.bs.toast', ()=> el.remove());
+  }
+
+  // Abrir modal
+  document.getElementById('btnUploadOpen').addEventListener('click', ()=>{
+    document.getElementById('excelFile').value = '';
+    document.getElementById('previewWrap').style.display = 'none';
+    document.getElementById('previewHead').innerHTML = '';
+    document.getElementById('previewBody').innerHTML = '';
+    document.getElementById('btnInsert')?.classList.add('d-none');
+    previewRows = []; previewCols = [];
+    modal.show();
+  });
+
+  // Cargar y preprocesar Excel
+  document.getElementById('excelFile').addEventListener('change', async (ev)=>{
+    const f = ev.target.files?.[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    try{
+      const r = await fetch('/api/hold/preview', { method:'POST', body: fd });
+      const j = await r.json();
+      if (!j.ok){
+        showToast({ title:'Error', body: j.msg || 'No se pudo procesar el archivo.', variant:'error' });
+        return;
+      }
+      // Render preview
+      previewCols = j.columns || [];
+      previewRows = j.rows || [];
+
+      // Cabeceras
+      const headHtml = '<tr>' + previewCols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+      document.getElementById('previewHead').innerHTML = headHtml;
+
+      // Filas (limitamos en pantalla pero mantenemos todo en previewRows)
+      const bodyHtml = previewRows.slice(0, 300).map(row=>{
+        return `<tr>` + previewCols.map(c=>`<td>${row[c] ?? ''}</td>`).join('') + `</tr>`;
+      }).join('');
+      document.getElementById('previewBody').innerHTML = bodyHtml;
+
+      document.getElementById('previewWrap').style.display = 'block';
+      if (isAdmin && previewRows.length){
+        document.getElementById('btnInsert')?.classList.remove('d-none');
+      }
+      showToast({ title:'Listo', body:`Se procesaron ${previewRows.length} filas.`, variant:'success' });
+    }catch(e){
+      showToast({ title:'Error', body:'No se pudo leer el archivo.', variant:'error' });
+    }
+  });
+
+  // Insertar en BD
+    document.getElementById('btnInsert')?.addEventListener('click', async ()=>{
+        if (!isAdmin){
+            showToast({ title:'Permisos', body:'Solo Admin puede insertar.', variant:'warning' });
+            return;
+        }
+        if (!previewRows.length){
+            showToast({ title:'Sin datos', body:'Carga un archivo primero.', variant:'warning' });
+            return;
+        }
+
+        // >>> Cierra el modal inmediatamente
+        modal.hide();
+
+        try{
+            const r = await fetch('/api/hold/insert', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ rows: previewRows })
+            });
+            const j = await r.json();
+            if (j.ok){
+                const inserted = j.inserted || 0;
+                const skipped  = j.skipped  || 0;
+                let body = `✔️ Filas insertadas: <strong>${inserted}</strong>`;
+                if (skipped > 0){
+                    body += `<br>⏭️ Omitidas por duplicado: <strong>${skipped}</strong>`;
+                }
+                showToast({ title:'Resultado de inserción', body: body, variant:'success' });
+            }else{
+            showToast({ title:'No insertado', body: j.msg || 'Revisa el archivo/datos.', variant:'warning' });
+            }
+        }catch(e){
+            showToast({ title:'Error', body:'No se pudo insertar.', variant:'error' });
+        }
+    });
+
+});
+</script>
+
+
+{% endblock %}
+

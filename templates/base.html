@@ -57,6 +57,9 @@
         <a class="nav-link" href="{{ url_for('inicio') }}">
             <i class="fa-solid fa-house"></i> <span>Inicio</span>
         </a>
+        <a class="nav-link" href="{{ url_for('hold') }}">
+            <i class="fa-solid fa-hand-holding-dollar"></i> <span>Hold</span>
+        </a>
         <a class="nav-link" href="{{ url_for('maquinas') }}">
             <i class="fa-solid fa-industry"></i> <span>Máquinas</span>
         </a>
@@ -103,6 +106,7 @@
         <div class="offcanvas-body d-flex flex-column">
         <nav class="menu flex-grow-1">
             <a class="nav-link" href="{{ url_for('inicio') }}"><i class="fa-solid fa-house"></i> Inicio</a>
+            <a class="nav-link" href="{{ url_for('hold') }}"><i class="fa-solid fa-hand-holding-dollar"></i> Hold</a>
             <a class="nav-link" href="{{ url_for('maquinas') }}"><i class="fa-solid fa-industry"></i> Máquinas</a>
             <a class="nav-link" href="{{ url_for('gastos') }}"><i class="fa-solid fa-wallet"></i> Gastos</a>
             <a class="nav-link" href="{{ url_for('cambio') }}"><i class="fa-solid fa-dollar-sign"></i> Tipo de cambio</a>

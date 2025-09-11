@@ -3,6 +3,14 @@
 from datetime import date
 import os
 
+import pandas as pd
+from psycopg2.extras import execute_values
+
+from datetime import date, datetime
+from decimal import Decimal
+
+
+
 from flask import (
     Flask,
     render_template,
@@ -162,6 +170,37 @@ def parse_date(v):
         return datetime.strptime(v, '%Y-%m-%d').date()
     except Exception:
         return None
+    
+from decimal import Decimal
+
+def _to_float(x):
+    """
+    Convierte a float desde Decimal/str/None de forma segura.
+    Acepta strings con comas de miles.
+    """
+    if x is None:
+        return None
+    if isinstance(x, Decimal):
+        return float(x)
+    if isinstance(x, (int, float)):
+        return float(x)
+    # Intentar parsear str
+    try:
+        s = str(x).strip().replace(",", "")
+        return float(s) if s else None
+    except Exception:
+        return None
+
+def _safe_div(a, b):
+    """
+    Divide con conversión previa y evita división por cero.
+    """
+    af = _to_float(a)
+    bf = _to_float(b)
+    if af is None or bf is None or bf == 0.0:
+        return 0.0
+    return af / bf
+
 
 
 # -----------------------------
@@ -194,7 +233,8 @@ def logout():
 # -----------------------------
 # Página principal (panel)
 # -----------------------------
-@app.route("/inicio")
+@app.route('/')
+@app.route('/inicio')
 def inicio():
     if not is_logged_in():
         return redirect(url_for("login"))
@@ -902,15 +942,583 @@ def api_gasto_eliminar(id_gasto):
     return jsonify({'ok': bool(ok)})
 
 
+#-------------
+# --- HOLD ---
+
+
+@app.route('/api/hold/preview', methods=['POST'])
+def api_hold_preview():
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
+
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'ok': False, 'msg': 'Adjunta un archivo .xlsx/.xls'}), 400
+
+    filename = (f.filename or '').lower()
+    if not (filename.endswith('.xlsx') or filename.endswith('.xls')):
+        return jsonify({'ok': False, 'msg': 'Formato no admitido. Usa .xlsx o .xls'}), 400
+
+    # Import local para evitar fallos si falta pandas en otros endpoints
+    try:
+        import pandas as pd
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Falta librería pandas en el servidor'}), 500
+
+    try:
+        # Leer Excel con heurística de engine
+        if filename.endswith('.xlsx'):
+            df = pd.read_excel(f, engine='openpyxl')
+        else:
+            # .xls -> intenta inferir; si no, xlrd
+            try:
+                df = pd.read_excel(f)
+            except Exception:
+                df = pd.read_excel(f, engine='xlrd')
+
+        # 1) Eliminar filas 1..5 (índices 0..4). Ajusta si tu archivo tiene otro offset.
+        df = df.drop(df.index[0:5])
+
+        # 2) Eliminar primeras 2 columnas por índice (si existen)
+        if df.shape[1] >= 2:
+            df = df.drop(df.columns[[0, 1]], axis=1)
+
+        # 2b) Eliminar columnas "Unnamed: x" específicas si existen
+        for col in ['Unnamed: 3','Unnamed: 7','Unnamed: 9','Unnamed: 19','Unnamed: 22',
+                    'Unnamed: 26','Unnamed: 28','Unnamed: 29','Unnamed: 30','Unnamed: 31','Unnamed: 32']:
+            if col in df.columns:
+                df = df.drop(columns=[col], axis=1)
+
+        # 3) Primera fila como encabezado
+        df.columns = df.iloc[0]
+        df = df[1:].reset_index(drop=True)
+
+        # 4) Quitar filas en blanco columna 'Jornada'
+        if 'Jornada' in df.columns:
+            df = df[df['Jornada'].notna()]
+
+        # 5) Quitar filas en blanco columna 'Máquina'
+        if 'Máquina' in df.columns:
+            df = df[df['Máquina'].notna()]
+
+        # 6) Renombrar columnas al conjunto final (orden exacto esperado por tu DB)
+        #    Asegúrate de que el número de columnas coincida; si no, revisa tu plantilla Excel.
+        df.columns = [
+            'maquina','jornada','jugado','ganado','bill','in_redimibles','promo_in_no_redimible','promo_redimible',
+            'out_redimible','promo_out_no_redimible','jackpot','salida_manual','total_in','total_out','total_re_in',
+            'total_re_out','jugadas','apuesta_media','jugadas_ganadas','promo_no_redimible'
+        ]
+
+        # 7) Reemplazar NaN por None
+        df = df.where(df.notnull(), None)
+
+        # Devolver preview
+        rows = df.to_dict(orient='records')
+        cols = list(df.columns)
+        return jsonify({'ok': True, 'columns': cols, 'rows': rows})
+    except Exception as e:
+        print("preview error:", e)
+        return jsonify({'ok': False, 'msg': 'Error procesando el Excel'}), 500
+
+
+# ================================================
+#  INSERT: inserta filas nuevas (evita duplicados)
+# ================================================
+@app.route('/api/hold/insert', methods=['POST'])
+def api_hold_insert():
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autenticado'}), 401
+
+    # Si no usas roles, comenta este bloque:
+    if session.get('rol') != 'Admin':
+        return jsonify({'ok': False, 'msg': 'Solo Admin puede insertar'}), 403
+
+    data = request.get_json(silent=True) or {}
+    rows = data.get('rows') or []
+    if not rows:
+        return jsonify({'ok': False, 'msg': 'No hay datos para insertar'}), 400
+
+    # Normalizadores
+    def numf(x):
+        if x in (None, '', 'NaN'):
+            return None
+        try:
+            return float(str(x).replace(',', ''))
+        except Exception:
+            return None
+
+    def numi(x):
+        if x in (None, '', 'NaN'):
+            return None
+        try:
+            return int(float(str(x).replace(',', '')))
+        except Exception:
+            return None
+
+    def strn(x):
+        x = (x or '').strip()
+        return x or None
+
+    conn = conectar_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT maquina, jornada FROM datos")
+            existentes = set((m or '', j or '') for (m, j) in cur.fetchall())
+
+        values = []
+        skipped = 0
+
+        for r in rows:
+            maquina = strn(r.get('maquina'))
+            jornada = strn(r.get('jornada'))
+            if not (maquina and jornada):
+                skipped += 1
+                continue
+            key = (maquina, jornada)
+            if key in existentes:
+                skipped += 1
+                continue
+
+            values.append((
+                maquina,
+                jornada,
+                numf(r.get('jugado')),
+                numf(r.get('ganado')),
+                numi(r.get('bill')),
+                numi(r.get('in_redimibles')),      # DF plural -> DB singular
+                numi(r.get('promo_in_no_redimible')),
+                numf(r.get('promo_redimible')),
+                numf(r.get('out_redimible')),
+                numf(r.get('promo_out_no_redimible')),
+                numf(r.get('jackpot')),
+                numf(r.get('salida_manual')),
+                numf(r.get('total_in')),
+                numf(r.get('total_out')),
+                numf(r.get('total_re_in')),
+                numf(r.get('total_re_out')),
+                numi(r.get('jugadas')),
+                numf(r.get('apuesta_media')),
+                numi(r.get('jugadas_ganadas')),
+                numi(r.get('promo_no_redimible')),
+            ))
+
+        if not values:
+            return jsonify({'ok': True, 'inserted': 0, 'skipped': skipped})
+
+        from psycopg2.extras import execute_values
+        sql = """
+          INSERT INTO datos
+          (maquina, jornada, jugado, ganado, bill, in_redimible, promo_in_no_redimible,
+           promo_redimible, out_redimible, promo_out_no_redimible, jackpot, salida_manual,
+           total_in, total_out, total_re_in, total_re_out, jugadas, apuesta_media,
+           jugadas_ganadas, promo_no_redimible)
+          VALUES %s
+        """
+        with conn:
+            with conn.cursor() as cur:
+                execute_values(cur, sql, values, page_size=1000)
+
+        return jsonify({'ok': True, 'inserted': len(values), 'skipped': skipped})
+
+    except Exception as e:
+        print("insert error:", e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({'ok': False, 'msg': 'Error al insertar'}), 500
+    finally:
+        conn.close()
+
+
+
+from datetime import date
+from flask import request, redirect, url_for
+
+MESES_NOMBRE = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+]
+
+from datetime import date
+from flask import request, redirect, url_for
+
+MESES_NOMBRE = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+]
+
+@app.route('/hold')
+def hold():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+
+    anio      = request.args.get('anio', type=int)
+    mes       = request.args.get('mes',  type=int)
+    dia       = request.args.get('dia',  type=int)
+    modelo_id = request.args.get('modelo_id', type=int)
+
+    # Usa el helper central para calcular todo el contexto
+    ctx = get_hold_context(anio, mes, dia, modelo_id)
+    return render_template("hold.html", **ctx)
+
+
+@app.route('/api/hold/data', methods=['GET'])
+def hold_data():
+    if not is_logged_in():
+        return jsonify({'ok': False, 'msg': 'No autorizado'}), 401
+
+    anio      = request.args.get('anio', type=int)
+    mes       = request.args.get('mes',  type=int)
+    dia       = request.args.get('dia',  type=int)
+    modelo_id = request.args.get('modelo_id', type=int)
+
+    ctx = get_hold_context(anio, mes, dia, modelo_id)
+
+    # Normaliza a JSON seguro (por si vinieran Decimal/fechas)
+    def norm(x):
+        if isinstance(x, dict):
+            return {k: norm(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [norm(v) for v in x]
+        if isinstance(x, (date, datetime)):
+            return x.strftime('%Y-%m-%d')
+        if isinstance(x, Decimal):
+            return float(x)
+        return x
+
+    return jsonify({'ok': True, 'data': norm(ctx)})
 
 
 
 
 
+# =========================
+# Helper: contexto para HOLD (JSON + Template)
+# =========================
+def get_hold_context(anio=None, mes=None, dia=None, modelo_id=None):
+    if not is_logged_in():
+        return {}
+
+    hoy = date.today()
+    anio_hoy = hoy.year
+    mes_hoy_num = hoy.month
+
+    # Filtros efectivos
+    anio_sel   = anio or anio_hoy
+    mes_sel    = mes  or mes_hoy_num
+    dia_sel    = dia
+    modelo_sel = modelo_id
+
+    base_cte = """
+      WITH dts AS (
+        SELECT d.*,
+               to_timestamp(d.jornada, 'DD/MM/YYYY HH24:MI') AS tstamp
+        FROM datos d
+      )
+    """
+
+    # Años disponibles
+    anios_rows = query_todos(base_cte + """
+        SELECT DISTINCT EXTRACT(YEAR FROM tstamp)::int AS anio
+        FROM dts
+        WHERE tstamp IS NOT NULL
+        ORDER BY 1 DESC
+    """)
+    anios_disponibles = [r['anio'] for r in anios_rows]
+    if anio_hoy not in anios_disponibles:
+        anios_disponibles = [anio_hoy] + anios_disponibles
+
+    # Meses disponibles
+    meses_rows = query_todos(base_cte + """
+        SELECT DISTINCT EXTRACT(MONTH FROM tstamp)::int AS mes
+        FROM dts
+        WHERE tstamp IS NOT NULL
+          AND EXTRACT(YEAR FROM tstamp)::int = %s
+        ORDER BY 1
+    """, (anio_sel,))
+    meses_disponibles = [r['mes'] for r in meses_rows]
+    if anio_sel == anio_hoy and mes_hoy_num not in meses_disponibles:
+        meses_disponibles = [mes_hoy_num] + meses_disponibles
+    if meses_disponibles and mes_sel not in meses_disponibles:
+        mes_sel = mes_hoy_num if mes_hoy_num in meses_disponibles else meses_disponibles[0]
+
+    # Días disponibles
+    dias_rows = query_todos(base_cte + """
+        SELECT DISTINCT EXTRACT(DAY FROM tstamp)::int AS dia
+        FROM dts
+        WHERE tstamp IS NOT NULL
+          AND EXTRACT(YEAR FROM tstamp)::int = %s
+          AND EXTRACT(MONTH FROM tstamp)::int = %s
+        ORDER BY 1
+    """, (anio_sel, mes_sel))
+    dias_disponibles = [r['dia'] for r in dias_rows]
+    if dia_sel and dias_disponibles and dia_sel not in dias_disponibles:
+        dia_sel = None  # "Todos"
+
+    # Tipo de cambio (tu DB guarda el mes como texto)
+    mes_sel_nombre = MESES_NOMBRE[mes_sel - 1]
+    tipo_cambio_actual = query_uno("""
+        SELECT id_cambio, anio, mes, valor_cambio
+        FROM tipo_cambio
+        WHERE anio = %s AND mes = %s
+        LIMIT 1
+    """, (anio_sel, mes_sel_nombre)) or {
+        "anio": anio_sel, "mes": mes_sel_nombre, "valor_cambio": "-"
+    }
+    tc_val = _to_float(tipo_cambio_actual.get('valor_cambio')) if isinstance(tipo_cambio_actual, dict) else None
+
+    # ====== 1) KPIs GLOBALES (solo Año/Mes) ======
+    where_kpi = (
+        " WHERE tstamp IS NOT NULL "
+        " AND EXTRACT(YEAR FROM tstamp)::int = %s "
+        " AND EXTRACT(MONTH FROM tstamp)::int = %s "
+    )
+    params_kpi = [anio_sel, mes_sel]
+
+    ingreso_total = _to_float(query_valor(base_cte + f"""
+        SELECT COALESCE(SUM(total_in),0)
+        FROM dts
+        {where_kpi}
+    """, tuple(params_kpi))) or 0.0
+
+    win_total = _to_float(query_valor(base_cte + f"""
+        SELECT COALESCE(SUM(total_in - total_out),0)
+        FROM dts
+        {where_kpi}
+    """, tuple(params_kpi))) or 0.0
+
+    dias_periodo_t = query_valor(base_cte + f"""
+        SELECT COUNT(DISTINCT DATE(tstamp))
+        FROM dts
+        {where_kpi}
+    """, tuple(params_kpi)) or 0
+
+    maquinas_distintas_kpi = query_valor(base_cte + f"""
+        SELECT COUNT(DISTINCT maquina)
+        FROM dts
+        {where_kpi} AND COALESCE(jugado,0) > 0
+    """, tuple(params_kpi)) or 0
+
+    prom_dias_jugado_pos_t = query_valor(base_cte + f"""
+        SELECT COALESCE(AVG(sub.cnt), 0)
+        FROM (
+        SELECT d.maquina, COUNT(DISTINCT DATE(d.tstamp)) AS cnt
+        FROM dts d
+        JOIN maquinas m 
+            ON regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+            = regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        {where_kpi} AND COALESCE(d.jugado,0) > 0
+        GROUP BY d.maquina
+        ) sub
+    """, params_kpi) or 0.0
+
+    prom_dias_jugado_pos_t = _to_float(prom_dias_jugado_pos_t) or 0.0
+
+    avg_net_in = avg_net_win = net_in_diario = net_win_diario = retencion = 0.0
+    if tc_val and dias_periodo_t and maquinas_distintas_kpi:
+        avg_net_in  = _safe_div(_safe_div(ingreso_total, dias_periodo_t), tc_val)
+        avg_net_in  = _safe_div(avg_net_in, maquinas_distintas_kpi)
+        avg_net_win = _safe_div(_safe_div(win_total,     dias_periodo_t), tc_val)
+        avg_net_win = _safe_div(avg_net_win, maquinas_distintas_kpi)
+
+    if tc_val and prom_dias_jugado_pos_t and maquinas_distintas_kpi:
+        net_in_diario  = _safe_div(_safe_div(ingreso_total, prom_dias_jugado_pos_t), tc_val)
+        net_in_diario  = _safe_div(net_in_diario, maquinas_distintas_kpi)
+        net_win_diario = _safe_div(_safe_div(win_total,     prom_dias_jugado_pos_t), tc_val)
+        net_win_diario = _safe_div(net_win_diario, maquinas_distintas_kpi)
+
+    if ingreso_total:
+        retencion = _safe_div(win_total, ingreso_total) * 100.0
+
+    # ====== 2) BLOQUE FILTRABLE (Año, Mes, Día?, Modelo?) ======
+    # where_mes_anio: SOLO A/M (para días del período)
+    where_mes_anio = where_kpi
+    params_mes_anio = list(params_kpi)
+
+    # where_periodo: A/M + (opcional) Día
+    where_periodo = where_kpi
+    params_periodo = list(params_kpi)
+    if dia_sel:
+        where_periodo += " AND EXTRACT(DAY FROM tstamp)::int = %s "
+        params_periodo.append(dia_sel)
+
+    # where_join: (periodo) + (opcional) modelo — JOIN normalizado m.numero ↔ d.maquina
+    where_join = where_periodo
+    params_join = list(params_periodo)
+    if modelo_sel:
+        where_join += " AND m.id_modelo = %s "
+        params_join.append(modelo_sel)
+    params_join = tuple(params_join)
+
+    prom_dias_jugado_pos = query_valor(base_cte + f"""
+        SELECT COALESCE(AVG(sub.cnt), 0)
+        FROM (
+          SELECT maquina, COUNT(DISTINCT DATE(tstamp)) AS cnt
+          FROM dts
+          {where_periodo} AND COALESCE(jugado,0) > 0
+          GROUP BY maquina
+        ) sub
+    """, tuple(params_periodo)) or 0.0
+    prom_dias_jugado_pos = _to_float(prom_dias_jugado_pos) or 0.0
+
+    # Máquinas distintas (A/M; jugado>0) usando clave normalizada en dts
+    maquinas_distintas = query_valor(base_cte + f"""
+        SELECT COUNT(
+            DISTINCT regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        )
+        FROM dts d
+        {where_kpi} AND COALESCE(d.jugado,0) > 0
+    """, tuple(params_kpi)) or 0
+
+    # Máquinas activas (A/M[/D][/Modelo]; jugado>0) con JOIN normalizado
+    maquinas_activas_hold = query_valor(base_cte + f"""
+        SELECT COUNT(DISTINCT m.id_maquina)
+        FROM dts d
+        JOIN maquinas m 
+          ON regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+           = regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        {where_join} AND COALESCE(d.jugado,0) > 0
+    """, params_join) or 0
+
+    # Días del período (solo A/M)
+    dias_periodo = query_valor(base_cte + f"""
+        SELECT COUNT(DISTINCT DATE(tstamp))
+        FROM dts
+        {where_mes_anio}
+    """, tuple(params_mes_anio)) or 0
+
+    # Totales (IN y WIN) bajo filtros — JOIN normalizado
+    ingreso_total_m = _to_float(query_valor(base_cte + f"""
+        SELECT COALESCE(SUM(d.total_in),0)
+        FROM dts d
+        JOIN maquinas m 
+          ON regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+           = regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        {where_join}
+    """, params_join)) or 0.0
+
+    win_total_m = _to_float(query_valor(base_cte + f"""
+        SELECT COALESCE(SUM(d.total_in - d.total_out),0)
+        FROM dts d
+        JOIN maquinas m 
+          ON regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+           = regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        {where_join}
+    """, params_join)) or 0.0
+
+    # Días con juego (>0) bajo filtros (para *_diario_m)
+    dias_periodo_pos_m = query_valor(base_cte + f"""
+        SELECT COALESCE(AVG(sub.cnt), 0)
+        FROM (
+        SELECT d.maquina, COUNT(DISTINCT DATE(d.tstamp)) AS cnt
+        FROM dts d
+        JOIN maquinas m 
+            ON regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+            = regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+        {where_join} AND COALESCE(d.jugado,0) > 0
+        GROUP BY d.maquina
+        ) sub
+    """, params_join) or 0.0
+
+    avg_net_in_m = net_in_diario_m = avg_net_win_m = net_win_diario_m = retencion_m = 0.0
+    if tc_val and maquinas_activas_hold and dias_periodo:
+        avg_net_in_m  = _safe_div(_safe_div(ingreso_total_m, maquinas_activas_hold), tc_val)
+        avg_net_in_m  = _safe_div(avg_net_in_m, dias_periodo)
+        avg_net_win_m = _safe_div(_safe_div(win_total_m, maquinas_activas_hold), tc_val)
+        avg_net_win_m = _safe_div(avg_net_win_m, dias_periodo)
+
+    if tc_val and maquinas_activas_hold and dias_periodo_pos_m:
+        net_in_diario_m  = _safe_div(_safe_div(ingreso_total_m, dias_periodo_pos_m), tc_val)
+        net_in_diario_m  = _safe_div(net_in_diario_m, maquinas_activas_hold)
+        net_win_diario_m = _safe_div(_safe_div(win_total_m, dias_periodo_pos_m), tc_val)
+        net_win_diario_m = _safe_div(net_win_diario_m, maquinas_activas_hold)
+
+    if ingreso_total_m:
+        retencion_m = _safe_div(win_total_m, ingreso_total_m) * 100.0
+
+    # Sidebar de modelos
+    where_sidebar_on = """
+          AND EXTRACT(YEAR  FROM d.tstamp)::int = %s
+          AND EXTRACT(MONTH FROM d.tstamp)::int = %s
+    """
+    params_sidebar = [anio_sel, mes_sel]
+    if dia_sel:
+        where_sidebar_on += " AND EXTRACT(DAY FROM d.tstamp)::int = %s "
+        params_sidebar.append(dia_sel)
+
+    modelos_sidebar = query_todos(base_cte + f"""
+        SELECT 
+            mo.id_modelo,
+            mo.name_modelo,
+            COUNT(DISTINCT CASE WHEN COALESCE(d.jugado,0) > 0 THEN m.id_maquina END) AS cant_maquinas_periodo
+        FROM modelos mo
+        LEFT JOIN maquinas m 
+               ON m.id_modelo = mo.id_modelo
+        LEFT JOIN dts d 
+               ON regexp_replace(btrim(lower(d.maquina::text)),'[^0-9a-z]+','','g')
+               =  regexp_replace(btrim(lower(m.numero::text)),'[^0-9a-z]+','','g')
+              {where_sidebar_on}
+        GROUP BY mo.id_modelo, mo.name_modelo
+        HAVING COUNT(CASE WHEN COALESCE(d.jugado,0) > 0 THEN m.id_maquina END) > 0
+        ORDER BY mo.name_modelo NULLS LAST
+    """, tuple(params_sidebar))
+
+    meses_opciones = [{"num": m, "nombre": MESES_NOMBRE[m-1]} for m in sorted(set(meses_disponibles))]
+
+    return {
+        "fecha_actual": hoy.strftime('%d-%m-%Y'),
+        "tipo_cambio_actual": {
+            "anio": tipo_cambio_actual["anio"],
+            "mes":  tipo_cambio_actual["mes"],
+            "valor_cambio": _to_float(tipo_cambio_actual.get("valor_cambio")) if isinstance(tipo_cambio_actual, dict) else tipo_cambio_actual
+        },
+        "anios_disponibles": anios_disponibles,
+        "meses_opciones": meses_opciones,
+        "dias_disponibles": dias_disponibles,
+        "anio_sel": anio_sel,
+        "mes_sel": mes_sel,
+        "dia_sel": dia_sel,
+        "modelo_sel": modelo_sel,
+        "maquinas_distintas": maquinas_distintas,
+        "modelos_sidebar": modelos_sidebar,
+        "maquinas_activas_hold": maquinas_activas_hold,
+        "dias_periodo": dias_periodo,
+        "ingreso_total": ingreso_total,
+        "win_total": win_total,
+        "avg_net_in": avg_net_in,
+        "avg_net_in_diario": 0.0,
+        "net_in_diario": net_in_diario,
+        "prom_dias_jugado_pos": prom_dias_jugado_pos,
+        "prom_dias_jugado_pos_t": prom_dias_jugado_pos_t,
+        "avg_net_win": avg_net_win,
+        "net_win_diario": net_win_diario,
+        "retencion": retencion,
+        "ingreso_total_m": ingreso_total_m,
+        "win_total_m": win_total_m,
+        "dias_periodo_m": dias_periodo,
+        "maquinas_distintas_m": maquinas_distintas,
+        "ingreso_total_pos_m": None,
+        "dias_periodo_pos_m": dias_periodo_pos_m,
+        "prom_dias_jugado_pos_m": None,
+        "maquinas_activas_hold_m": None,
+        "avg_net_in_m": avg_net_in_m,
+        "avg_net_in_diario_m": 0.0,
+        "net_in_diario_m": net_in_diario_m,
+        "avg_net_win_m": avg_net_win_m,
+        "net_win_diario_m": net_win_diario_m,
+        "retencion_m": retencion_m,
+        "rol": session.get("rol"),
+        "usuario": session.get("usuario"),
+    }
 
 
 
+@app.route('/__routes__')
+def __routes__():
+    return '<pre>' + '\n'.join(sorted(map(str, app.url_map.iter_rules()))) + '</pre>'
 
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     app.run(debug=True)

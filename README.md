@@ -7,3 +7,4 @@ CREATE TABLE IF NOT EXISTS gastos (
   CONSTRAINT fk_gastos_maquina FOREIGN KEY (id_maquina)
     REFERENCES maquinas(id_maquina) ON UPDATE CASCADE ON DELETE RESTRICT
 );
+ # maquinas 
